@@ -66,3 +66,19 @@ def test_journal_cli(tmp_path, monkeypatch):
     assert runner.invoke(app, ["journal", "rm", "1"]).exit_code == 1
     assert runner.invoke(app, ["journal", "roots", "--add", str(tmp_path)]).exit_code == 0
     assert runner.invoke(app, ["journal", "roots", "--add", "/missing/dir"]).exit_code == 1
+
+
+def test_repos_cli(tmp_path):
+    from gitutil import commit, git, init
+
+    r = init(tmp_path / "projects" / "demo")
+    commit(r, "init")
+    git(r, "branch", "done-feature")
+    (r / "wip.txt").write_text("x")
+    assert runner.invoke(app, ["journal", "roots", "--add", str(tmp_path / "projects")]).exit_code == 0
+
+    out = runner.invoke(app, ["repos"]).stdout
+    assert "demo" in out and "изменения" in out and "слитых веток 1" in out
+    assert "слита" in runner.invoke(app, ["repos", "branches", "demo"]).stdout
+    assert "Удалено веток: 1" in runner.invoke(app, ["repos", "prune", "demo", "-y"]).stdout
+    assert runner.invoke(app, ["repos", "branches", "missing"]).exit_code == 1

@@ -48,7 +48,20 @@
 
 Горячие клавиши: `Enter` записать · `Alt+1…4` сменить тип записи. Через `Ctrl+K` можно скопировать отчёт к стендапу из любого места.
 
-Следующий модуль: **Git-дашборд**.
+### 🌿 Git-дашборд
+
+Все ваши репозитории на одном экране.
+
+![Git dashboard](docs/screenshots/git-dashboard.png)
+
+- статус каждого репозитория: **изменения** (staged / modified / untracked / конфликты), **↑ не отправлено**, **↓ отстаёт**, stash;
+- последний коммит, активность за 14 дней, время последнего fetch;
+- сначала показаны репозитории, которым нужно внимание; есть фильтры и поиск;
+- по клику открывается панель: список изменённых файлов, ветки (слитые, устаревшие, с удалённым upstream), последние коммиты;
+- безопасные действия: **Fetch** (одного или всех сразу), **Pull --ff-only** (только если рабочая копия чистая), **удаление слитых веток** через `git branch -d`, копирование `cd`, ссылка на GitHub / GitLab / Bitbucket;
+- команды выполняются только в репозиториях из ваших папок с проектами; токены в URL remote скрываются.
+
+![Repository details](docs/screenshots/git-repo.png)
 
 <details>
 <summary>Ещё скриншоты</summary>
@@ -59,12 +72,13 @@
 ![Snippet editor](docs/screenshots/snippets-editor.png)
 ![Command palette](docs/screenshots/palette.png)
 ![Journal light](docs/screenshots/journal-light.png)
+![Git light](docs/screenshots/git-light.png)
 
 </details>
 
 ## Установка
 
-Нужен Python 3.10+. Git необязателен: без него в дневнике просто не будет коммитов.
+Нужен Python 3.10+. Git нужен для дневника (коммиты) и Git-дашборда; остальное работает и без него.
 
 ```bash
 git clone https://github.com/Auco24/TestProject.git
@@ -130,6 +144,16 @@ devtool journal done 12                    # отметить план выпо�
 devtool journal roots --add ~/projects     # где искать git-репозитории
 ```
 
+### Git-дашборд в терминале
+
+```bash
+devtool repos                              # статус всех репозиториев
+devtool repos -a                           # только требующие внимания
+devtool repos fetch                        # git fetch --all --prune везде
+devtool repos branches my-app              # ветки: слитые, устаревшие, upstream удалён
+devtool repos prune my-app                 # удалить слитые ветки (git branch -d)
+```
+
 `devtool --help` и `devtool <команда> --help` показывают все опции.
 
 ## Разработка
@@ -150,15 +174,17 @@ devtool/
 ├── snippets.py     # сниппеты: CRUD, поиск, теги, импорт/экспорт
 ├── journal.py      # дневник: записи, таймлайн, стендап, статистика
 ├── gitinfo.py      # обёртки над git CLI: репозиторий, ветка, коммиты
+├── repos.py        # Git-дашборд: статус, ветки, fetch/pull/prune
 ├── settings.py     # настройки (key/value в SQLite)
 ├── clipboard.py    # буфер обмена без внешних зависимостей
-├── api.py          # FastAPI: /api/tools/*, /api/snippets/*, /api/journal/* + интерфейс
+├── api.py          # FastAPI: /api/tools/*, /api/snippets/*, /api/journal/*, /api/git/* + интерфейс
 ├── cli.py          # Typer CLI
 └── static/         # интерфейс: HTML + CSS + JS, без внешних CDN
     ├── app.js      #   утилиты, навигация, Ctrl+K
     ├── snippets.js #   модуль сниппетов + подсветка синтаксиса
-    └── journal.js  #   дневник, стендап, тепловая карта
-tests/              # pytest: tools, API, CLI
+    ├── journal.js  #   дневник, стендап, тепловая карта
+    └── git.js      #   Git-дашборд
+tests/              # pytest: модули, API, CLI (с настоящими временными git-репозиториями)
 ```
 
 Чтобы добавить новый инструмент:

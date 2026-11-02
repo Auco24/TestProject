@@ -8,11 +8,12 @@ import sys
 import threading
 import webbrowser
 from datetime import timedelta
+from pathlib import Path
 from typing import Optional
 
 import typer
 
-from . import __version__, clipboard, db, gitinfo, journal, settings, snippets, tools
+from . import __version__, clipboard, db, gitinfo, journal, repos, settings, snippets, tools
 
 app = typer.Typer(
     help="Dev Toolkit — локальный набор утилит для программиста.",
@@ -463,8 +464,6 @@ def journal_roots(
     remove: list[str] = typer.Option([], "--remove", "-r", help="Убрать папку."),
 ) -> None:
     """Папки, в которых искать git-репозитории для коммитов в отчёте."""
-    from pathlib import Path
-
     with db.session() as conn:
         roots = settings.get(conn, "git_roots")
         for a in add:
@@ -485,6 +484,138 @@ def journal_roots(
         typer.echo(typer.style(r, bold=True))
         for repo in gitinfo.find_repos([r]):
             typer.echo("  " + typer.style("⎇ ", fg=typer.colors.MAGENTA) + repo)
+
+
+# --------------------------------------------------------------- Git dashboard
+
+repos_app = typer.Typer(help="Git-дашборд: состояние всех репозиториев.", invoke_without_command=True)
+app.add_typer(repos_app, name="repos")
+
+HEALTH_STYLE = {
+    "conflict": ("✗ конфликт", typer.colors.RED),
+    "dirty": ("● изменения", typer.colors.YELLOW),
+    "unpushed": ("↑ не отправлено", typer.colors.MAGENTA),
+    "behind": ("↓ отстаёт", typer.colors.BLUE),
+    "local": ("○ без remote", typer.colors.BRIGHT_BLACK),
+    "clean": ("✓ чисто", typer.colors.GREEN),
+    "error": ("? ошибка", typer.colors.RED),
+}
+
+
+def _known_repos() -> list[str]:
+    with db.session() as conn:
+        return journal.known_repos(conn)
+
+
+def _resolve_repo(name_or_path: str) -> str:
+    known = _known_repos()
+    p = str(Path(name_or_path).expanduser().resolve())
+    if p in known:
+        return p
+    matches = [k for k in known if Path(k).name == name_or_path]
+    if len(matches) == 1:
+        return matches[0]
+    typer.secho(f"✗ Репозиторий не найден: {name_or_path}" + (" (неоднозначно)" if matches else ""), fg=typer.colors.RED, err=True)
+    raise typer.Exit(1)
+
+
+@repos_app.callback()
+def repos_status(
+    ctx: typer.Context,
+    attention: bool = typer.Option(False, "--attention", "-a", help="Только требующие внимания."),
+) -> None:
+    """Показать состояние всех репозиториев (devtool repos)."""
+    if ctx.invoked_subcommand:
+        return
+    paths = _known_repos()
+    if not paths:
+        typer.secho("Репозитории не найдены. Добавьте папку: devtool journal roots --add ~/projects", fg=typer.colors.YELLOW)
+        raise typer.Exit(0)
+    data = repos.all_status(paths)
+    width = max(len(r["name"]) for r in data["repos"])
+    for r in data["repos"]:
+        if attention and r["health"] in ("clean", "local"):
+            continue
+        label, color = HEALTH_STYLE[r["health"]]
+        branch = r.get("branch") or "(detached)"
+        sync = ""
+        if r.get("ahead"):
+            sync += typer.style(f" ↑{r['ahead']}", fg=typer.colors.MAGENTA)
+        if r.get("behind"):
+            sync += typer.style(f" ↓{r['behind']}", fg=typer.colors.BLUE)
+        changes = ""
+        if r.get("changes"):
+            bits = [f"✗{r['conflicts']}" if r["conflicts"] else "", f"+{r['staged']}" if r["staged"] else "", f"~{r['modified']}" if r["modified"] else "",
+                    f"?{r['untracked']}" if r["untracked"] else ""]
+            changes = " " + typer.style(" ".join(b for b in bits if b), fg=typer.colors.YELLOW)
+        extra = []
+        if r.get("stash"):
+            extra.append(f"stash {r['stash']}")
+        if r.get("merged_branches"):
+            extra.append(f"слитых веток {r['merged_branches']}")
+        typer.echo(
+            f"{typer.style(r['name'].ljust(width), bold=True)}  {typer.style(label.ljust(15), fg=color)}"
+            f" {typer.style(branch, fg=typer.colors.CYAN)}{sync}{changes}"
+            + (typer.style("  · " + ", ".join(extra), fg=typer.colors.BRIGHT_BLACK) if extra else "")
+        )
+    sm = data["summary"]
+    typer.secho(
+        f"\n{sm['total']} репоз. · изменений {sm['dirty']} · не отправлено {sm['unpushed']} · отстают {sm['behind']}",
+        fg=typer.colors.BRIGHT_BLACK,
+    )
+
+
+@repos_app.command("fetch")
+def repos_fetch() -> None:
+    """git fetch --all --prune во всех репозиториях."""
+    paths = _known_repos()
+    with typer.progressbar(length=1, label=f"fetch {len(paths)} репоз.") as bar:
+        r = repos.fetch_many(paths)
+        bar.update(1)
+    for item in r["results"]:
+        if not item["ok"]:
+            typer.secho(f"✗ {item['path']}: {item['error']}", fg=typer.colors.RED)
+    typer.secho(f"✓ Успешно: {r['ok']}, с ошибками: {r['failed']}", fg=typer.colors.GREEN if not r["failed"] else typer.colors.YELLOW)
+
+
+@repos_app.command("branches")
+def repos_branches(repo: str = typer.Argument(..., help="Имя или путь репозитория.")) -> None:
+    """Ветки репозитория: слитые, устаревшие, отслеживание."""
+    path = _resolve_repo(repo)
+    for b in repos.branches(path):
+        marks = []
+        if b["current"]:
+            marks.append(typer.style("текущая", fg=typer.colors.GREEN))
+        if b["default"]:
+            marks.append(typer.style("основная", fg=typer.colors.CYAN))
+        if b["merged"]:
+            marks.append(typer.style("слита", fg=typer.colors.MAGENTA))
+        if b["stale"]:
+            marks.append(typer.style(f"{b['age_days']} дн. без коммитов", fg=typer.colors.YELLOW))
+        if b["gone"]:
+            marks.append(typer.style("upstream удалён", fg=typer.colors.RED))
+        prefix = "*" if b["current"] else " "
+        typer.echo(f"{prefix} {typer.style(b['name'], bold=True)}  " + "  ".join(marks))
+
+
+@repos_app.command("prune")
+def repos_prune(
+    repo: str = typer.Argument(..., help="Имя или путь репозитория."),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Не спрашивать подтверждение."),
+) -> None:
+    """Удалить локальные ветки, уже слитые в основную (git branch -d)."""
+    path = _resolve_repo(repo)
+    names = [b["name"] for b in repos.branches(path) if b["merged"] and not b["current"] and not b["default"]]
+    if not names:
+        typer.echo("Слитых веток нет.")
+        return
+    typer.echo("Будут удалены: " + ", ".join(names))
+    if not yes and not typer.confirm("Удалить?"):
+        raise typer.Abort()
+    r = repos.delete_branches(path, names)
+    for e in r["errors"]:
+        typer.secho(f"✗ {e['name']}: {e['error']}", fg=typer.colors.RED)
+    typer.secho(f"✓ Удалено веток: {len(r['deleted'])}", fg=typer.colors.GREEN)
 
 
 if __name__ == "__main__":  # pragma: no cover

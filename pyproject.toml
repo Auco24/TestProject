@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "devtool"
-version = "0.3.0"
+version = "1.0.0"
 description = "Local offline toolkit for everyday developer tasks"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,3 +29,4 @@ devtool = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]

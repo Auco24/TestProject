@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, db, gitinfo, journal, settings, snippets, tools
+from . import __version__, db, gitinfo, journal, repos, settings, snippets, tools
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -240,6 +240,55 @@ async def set_git_roots(request: Request, conn=Depends(get_db)) -> dict[str, Any
             clean.append(str(p.resolve()))
     settings.set(conn, "git_roots", clean)
     return {"roots": clean, "repos": gitinfo.find_repos(clean)}
+
+
+# ---------------------------------------------------------------- Git dashboard
+
+
+def _known_repo(conn, path: Any) -> str:
+    """Only repositories the dashboard already knows about may be acted upon."""
+    if not isinstance(path, str) or not path:
+        raise tools.ToolError("Не указан путь к репозиторию")
+    resolved = str(Path(path).expanduser().resolve())
+    if resolved not in journal.known_repos(conn):
+        raise tools.ToolError("Репозиторий не найден среди папок с проектами")
+    return resolved
+
+
+@app.get("/api/git/repos")
+def git_repos(conn=Depends(get_db)) -> dict[str, Any]:
+    data = repos.all_status(journal.known_repos(conn))
+    data["roots"] = settings.get(conn, "git_roots")
+    data["git"] = gitinfo.git_available()
+    return data
+
+
+@app.get("/api/git/repo")
+def git_repo(path: str, conn=Depends(get_db)) -> dict[str, Any]:
+    return repos.repo_status(_known_repo(conn, path), detailed=True)
+
+
+@app.post("/api/git/fetch")
+async def git_fetch(request: Request, conn=Depends(get_db)) -> dict[str, Any]:
+    body = await _object_body(request)
+    if body.get("path"):
+        return repos.fetch(_known_repo(conn, body["path"]))
+    return repos.fetch_many(journal.known_repos(conn))
+
+
+@app.post("/api/git/pull")
+async def git_pull(request: Request, conn=Depends(get_db)) -> dict[str, Any]:
+    body = await _object_body(request)
+    return repos.pull_ff(_known_repo(conn, body.get("path")))
+
+
+@app.post("/api/git/delete-branches")
+async def git_delete_branches(request: Request, conn=Depends(get_db)) -> dict[str, Any]:
+    body = await _object_body(request)
+    names = body.get("branches")
+    if not isinstance(names, list) or not all(isinstance(n, str) for n in names) or not names:
+        raise tools.ToolError("Ожидается непустой список веток")
+    return repos.delete_branches(_known_repo(conn, body.get("path")), names)
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

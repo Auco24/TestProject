@@ -20,7 +20,7 @@
       </div>
       <div>
         <div class="brand-name">Dev Toolkit</div>
-        <div class="brand-sub">v0.3 · офлайн</div>
+        <div class="brand-sub">v1.0 · офлайн</div>
       </div>
     </div>
 
@@ -38,9 +38,9 @@
         <svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg>
         Дневник <span class="count" id="jStreakNav" title="Дней подряд"></span>
       </a>
-      <a class="nav-item disabled" title="Этап 4">
+      <a class="nav-item" href="#git" data-view="git">
         <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 3-4 3.5-10 5"/></svg>
-        Git-дашборд <span class="soon">скоро</span>
+        Git <span class="count warn" id="gNavCount" title="Репозиториев требуют внимания"></span>
       </a>
     </nav>
 
@@ -346,6 +346,37 @@
         </aside>
       </div>
     </div>
+
+    <!-- ============================== GIT DASHBOARD ============================== -->
+    <div class="view" id="view-git" hidden>
+      <div class="toolbar">
+        <div class="stat-chips" id="gSummary"></div>
+        <div class="spacer"></div>
+        <button class="btn ghost" id="gRefresh" title="Перечитать статус (R)">
+          <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>Обновить
+        </button>
+        <button class="btn primary" id="gFetchAll" title="git fetch --all --prune во всех репозиториях">
+          <svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Fetch всех
+        </button>
+      </div>
+      <div class="toolbar git-filters">
+        <div class="search-box grow">
+          <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
+          <input id="gSearch" placeholder="Фильтр по имени или ветке…" autocomplete="off">
+        </div>
+        <div class="segmented" data-name="gFilter">
+          <button class="on" data-value="all">Все</button>
+          <button data-value="attention">Требуют внимания</button>
+          <button data-value="clean">Чистые</button>
+        </div>
+        <select id="gSort" class="input">
+          <option value="status">По статусу</option>
+          <option value="activity">По активности</option>
+          <option value="name">По имени</option>
+        </select>
+      </div>
+      <div class="repo-grid" id="gGrid"></div>
+    </div>
   </main>
 </div>
 
@@ -355,6 +386,11 @@
     <input id="paletteIn" placeholder="Инструмент или сниппет…" autocomplete="off">
     <div class="palette-list" id="paletteList"></div>
   </div>
+</div>
+
+<!-- Repository drawer -->
+<div class="drawer-backdrop" id="gDrawer" hidden>
+  <aside class="drawer" id="gDrawerBody" role="dialog" aria-modal="true"></aside>
 </div>
 
 <!-- Confirm dialog -->
@@ -373,5 +409,6 @@
 <script src="/static/app.js"></script>
 <script src="/static/snippets.js"></script>
 <script src="/static/journal.js"></script>
+<script src="/static/git.js"></script>
 </body>
 </html>

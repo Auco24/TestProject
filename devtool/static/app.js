@@ -78,6 +78,10 @@ const ICONS = {
   regex: '<path d="M17 3v10M12.7 5.5l8.6 5M12.7 10.5l8.6-5"/><rect x="3" y="15" width="6" height="6" rx="1.5"/>',
   snippet: '<path d="M8 4h8l4 4v12H4V4h4zM8 4v4h8"/><path d="M8 13h8M8 17h5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  git: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 3-4 3.5-10 5"/>',
+  link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+  terminal: '<path d="M4 6l5 6-5 6M11 18h9"/>',
+  download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   journal: '<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>',
   star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
@@ -93,6 +97,7 @@ const VIEWS = {
   utils: { title: "Утилиты", sub: "Всё работает локально, данные не покидают ваш компьютер." },
   snippets: { title: "Сниппеты", sub: "Команды и куски кода, которые всегда под рукой." },
   journal: { title: "Дневник", sub: "Что сделано, что в планах и что мешает. Отчёт к стендапу в один клик." },
+  git: { title: "Git-дашборд", sub: "Все репозитории на одном экране: что не закоммичено, не отправлено и устарело." },
 };
 const onView = {};
 let currentView = null;
@@ -115,6 +120,9 @@ function route() {
     onView.snippetsRoute?.(hash.split("/")[1]);
   } else if (hash === "journal") {
     showView("journal");
+  } else if (hash.startsWith("git")) {
+    showView("git");
+    onView.gitRoute?.(hash.slice(4) || null);
   } else {
     activate(hash || store.get("tab", "json"));
   }
@@ -150,6 +158,8 @@ const PALETTE_STATIC = [
   ...TOOLS.map((t) => ({ kind: "tool", id: t.id, title: t.title, desc: t.desc, icon: t.icon })),
   { kind: "view", id: "snippets", title: "Сниппеты", desc: "Модуль", icon: "snippet" },
   { kind: "view", id: "journal", title: "Дневник", desc: "Модуль", icon: "journal" },
+  { kind: "view", id: "git", title: "Git-дашборд", desc: "Модуль", icon: "git" },
+  { kind: "action", id: "fetch-all", title: "Fetch всех репозиториев", desc: "Действие", icon: "git" },
   { kind: "action", id: "new-snippet", title: "Новый сниппет", desc: "Действие", icon: "plus" },
   { kind: "action", id: "log", title: "Записать в дневник", desc: "Действие", icon: "journal" },
   { kind: "action", id: "standup", title: "Скопировать отчёт к стендапу", desc: "Действие", icon: "copy" },
@@ -186,6 +196,7 @@ function runPaletteItem(item) {
   else if (item.id === "new-snippet") { location.hash = "snippets"; setTimeout(() => onView.newSnippet?.(), 0); }
   else if (item.id === "log") { location.hash = "journal"; setTimeout(() => onView.focusJournal?.(), 50); }
   else if (item.id === "standup") onView.copyStandup?.();
+  else if (item.id === "fetch-all") { location.hash = "git"; setTimeout(() => onView.fetchAll?.(), 50); }
   else if (item.kind === "snippet") onView.copySnippet?.(item.snippet);
 }
 function openPalette() { palette.el.hidden = false; palette.input.value = ""; palette.sel = 0; palette.snippets = []; renderPalette(); palette.input.focus(); }
