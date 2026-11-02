@@ -33,7 +33,22 @@
 
 Горячие клавиши в модуле: `/` поиск · `↑↓` или `j`/`k` навигация · `Enter` копировать · `N` новый · `E` редактировать · `F` избранное · `Ctrl+Enter` сохранить · `Esc` отмена.
 
-Следующие модули: **Дневник разработчика**, **Git-дашборд**.
+### 📝 Дневник разработчика
+
+Короткие записи о работе и отчёт к стендапу в один клик.
+
+![Journal](docs/screenshots/journal.png)
+
+- четыре типа записей: **Сделал**, **План**, **Блокер**, **Заметка**; планы и блокеры отмечаются выполненными одним кликом;
+- проект и ветка git определяются автоматически по папке, из которой вызван `devtool log`;
+- **отчёт к стендапу** «вчера / сегодня / блокеры» в форматах Текст, Markdown и Slack. В понедельник «вчера» — это пятница и выходные;
+- ваши **коммиты** из всех репозиториев в указанных папках сами попадают в таймлайн и отчёт (только ваши, по `user.email`);
+- таймлайн по дням, поиск, фильтр по проекту, `#теги`;
+- тепловая карта активности за 18 недель, серия дней подряд 🔥.
+
+Горячие клавиши: `Enter` записать · `Alt+1…4` сменить тип записи. Через `Ctrl+K` можно скопировать отчёт к стендапу из любого места.
+
+Следующий модуль: **Git-дашборд**.
 
 <details>
 <summary>Ещё скриншоты</summary>
@@ -43,12 +58,13 @@
 ![Generators](docs/screenshots/generators-light.png)
 ![Snippet editor](docs/screenshots/snippets-editor.png)
 ![Command palette](docs/screenshots/palette.png)
+![Journal light](docs/screenshots/journal-light.png)
 
 </details>
 
 ## Установка
 
-Нужен Python 3.10+.
+Нужен Python 3.10+. Git необязателен: без него в дневнике просто не будет коммитов.
 
 ```bash
 git clone https://github.com/Auco24/TestProject.git
@@ -99,6 +115,21 @@ devtool snip export backup.json            # экспорт
 devtool snip import backup.json            # импорт (дубликаты пропускаются)
 ```
 
+### Дневник в терминале
+
+```bash
+devtool log починил баг с логином #auth     # «Сделал», проект и ветка определятся сами
+devtool log -p написать тесты              # план
+devtool log -b жду доступы от DevOps        # блокер
+devtool log -n почитать про WAL            # заметка
+devtool log -y настроил CI                 # запись на вчера
+devtool standup                            # отчёт к стендапу
+devtool standup -f slack --copy            # в формате Slack, сразу в буфер обмена
+devtool journal show --days 7              # записи и коммиты за неделю
+devtool journal done 12                    # отметить план выполненным
+devtool journal roots --add ~/projects     # где искать git-репозитории
+```
+
 `devtool --help` и `devtool <команда> --help` показывают все опции.
 
 ## Разработка
@@ -117,12 +148,16 @@ devtool/
 ├── tools.py        # утилиты: чистые функции без зависимостей
 ├── db.py           # SQLite: подключение и миграции
 ├── snippets.py     # сниппеты: CRUD, поиск, теги, импорт/экспорт
+├── journal.py      # дневник: записи, таймлайн, стендап, статистика
+├── gitinfo.py      # обёртки над git CLI: репозиторий, ветка, коммиты
+├── settings.py     # настройки (key/value в SQLite)
 ├── clipboard.py    # буфер обмена без внешних зависимостей
-├── api.py          # FastAPI: /api/tools/*, /api/snippets/* + интерфейс
+├── api.py          # FastAPI: /api/tools/*, /api/snippets/*, /api/journal/* + интерфейс
 ├── cli.py          # Typer CLI
 └── static/         # интерфейс: HTML + CSS + JS, без внешних CDN
     ├── app.js      #   утилиты, навигация, Ctrl+K
-    └── snippets.js #   модуль сниппетов + подсветка синтаксиса
+    ├── snippets.js #   модуль сниппетов + подсветка синтаксиса
+    └── journal.js  #   дневник, стендап, тепловая карта
 tests/              # pytest: tools, API, CLI
 ```
 

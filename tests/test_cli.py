@@ -47,3 +47,22 @@ def test_snip_flow(tmp_path):
     assert runner.invoke(app, ["snip", "rm", "1", "-y"]).exit_code == 0
     assert runner.invoke(app, ["snip", "show", "1"]).exit_code == 1
     assert "Ничего не найдено" in runner.invoke(app, ["snip", "find", "status"]).stdout
+
+
+def test_journal_cli(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    assert "Сделал записано" in runner.invoke(app, ["log", "починил", "баг"]).stdout
+    assert "План записано" in runner.invoke(app, ["log", "-p", "тесты"]).stdout
+    assert runner.invoke(app, ["log", "-y", "вчерашнее"]).exit_code == 0
+
+    out = runner.invoke(app, ["journal", "show", "--no-commits"]).stdout
+    assert "Сегодня" in out and "починил баг" in out and "вчерашнее" in out
+
+    assert "Готово: тесты" in runner.invoke(app, ["journal", "done", "2"]).stdout
+    report = runner.invoke(app, ["standup", "-f", "md"]).stdout
+    assert "**Сегодня:**" in report and "починил баг ✓" in report
+
+    assert runner.invoke(app, ["journal", "rm", "1"]).exit_code == 0
+    assert runner.invoke(app, ["journal", "rm", "1"]).exit_code == 1
+    assert runner.invoke(app, ["journal", "roots", "--add", str(tmp_path)]).exit_code == 0
+    assert runner.invoke(app, ["journal", "roots", "--add", "/missing/dir"]).exit_code == 1

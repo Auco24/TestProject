@@ -533,4 +533,3 @@ onView.copySnippet = copySnippet;
 
 // sidebar counter even before the module is opened
 sapi("GET", "/api/snippets/meta").then((m) => { $("#snipCount").textContent = m.stats.total || ""; }).catch(() => {});
-route();

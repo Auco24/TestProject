@@ -9,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, db, snippets, tools
+from . import __version__, db, gitinfo, journal, settings, snippets, tools
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -17,7 +17,8 @@ app = FastAPI(title="Dev Toolkit", version=__version__, docs_url="/api/docs", re
 
 
 @app.exception_handler(snippets.NotFound)
-async def _not_found_handler(_: Request, exc: snippets.NotFound) -> JSONResponse:
+@app.exception_handler(journal.NotFound)
+async def _not_found_handler(_: Request, exc: tools.ToolError) -> JSONResponse:
     return JSONResponse(status_code=404, content={"error": exc.to_dict()})
 
 
@@ -169,6 +170,76 @@ def delete_snippet(snippet_id: int, conn=Depends(get_db)) -> Response:
 @app.post("/api/snippets/{snippet_id}/use")
 def use_snippet(snippet_id: int, conn=Depends(get_db)) -> dict[str, Any]:
     return snippets.mark_used(conn, snippet_id)
+
+
+# ------------------------------------------------------------------- Journal
+
+
+@app.get("/api/journal")
+def journal_timeline(
+    days: int = 14,
+    before: str | None = None,
+    project: str | None = None,
+    q: str | None = None,
+    commits: bool = True,
+    conn=Depends(get_db),
+) -> dict[str, Any]:
+    return journal.timeline(conn, days=days, before=before, project=project or None, q=q or None, with_commits=commits)
+
+
+@app.get("/api/journal/meta")
+def journal_meta(conn=Depends(get_db)) -> dict[str, Any]:
+    return {
+        "projects": journal.projects(conn),
+        "stats": journal.stats(conn),
+        "kinds": journal.KIND_LABELS,
+        "git": gitinfo.git_available(),
+        "git_roots": settings.get(conn, "git_roots"),
+    }
+
+
+@app.get("/api/journal/standup")
+def journal_standup(date: str | None = None, format: str = "md", conn=Depends(get_db)) -> dict[str, Any]:
+    return journal.standup(conn, for_day=date, fmt=format)
+
+
+@app.post("/api/journal", status_code=201)
+async def journal_add(request: Request, conn=Depends(get_db)) -> dict[str, Any]:
+    b = await _object_body(request)
+    return journal.add(
+        conn, b.get("text", ""), b.get("kind", "done"),
+        repo_path=b.get("repo_path") or None, project=b.get("project") or None, day=b.get("day") or None,
+    )
+
+
+@app.patch("/api/journal/{entry_id}")
+async def journal_update(entry_id: int, request: Request, conn=Depends(get_db)) -> dict[str, Any]:
+    return journal.update(conn, entry_id, await _object_body(request))
+
+
+@app.delete("/api/journal/{entry_id}", status_code=204)
+def journal_delete(entry_id: int, conn=Depends(get_db)) -> Response:
+    journal.delete(conn, entry_id)
+    return Response(status_code=204)
+
+
+@app.put("/api/settings/git_roots")
+async def set_git_roots(request: Request, conn=Depends(get_db)) -> dict[str, Any]:
+    body = await _json_body(request)
+    roots = body.get("roots") if isinstance(body, dict) else body
+    if not isinstance(roots, list) or not all(isinstance(r, str) for r in roots):
+        raise tools.ToolError("Ожидается список путей")
+    clean: list[str] = []
+    for r in roots:
+        p = Path(r.strip()).expanduser()
+        if not r.strip():
+            continue
+        if not p.is_dir():
+            raise tools.ToolError(f"Папка не найдена: {r}")
+        if str(p.resolve()) not in clean:
+            clean.append(str(p.resolve()))
+    settings.set(conn, "git_roots", clean)
+    return {"roots": clean, "repos": gitinfo.find_repos(clean)}
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

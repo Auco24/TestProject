@@ -78,6 +78,7 @@ const ICONS = {
   regex: '<path d="M17 3v10M12.7 5.5l8.6 5M12.7 10.5l8.6-5"/><rect x="3" y="15" width="6" height="6" rx="1.5"/>',
   snippet: '<path d="M8 4h8l4 4v12H4V4h4zM8 4v4h8"/><path d="M8 13h8M8 17h5"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  journal: '<path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>',
   star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
@@ -91,6 +92,7 @@ const onActivate = {};
 const VIEWS = {
   utils: { title: "Утилиты", sub: "Всё работает локально, данные не покидают ваш компьютер." },
   snippets: { title: "Сниппеты", sub: "Команды и куски кода, которые всегда под рукой." },
+  journal: { title: "Дневник", sub: "Что сделано, что в планах и что мешает. Отчёт к стендапу в один клик." },
 };
 const onView = {};
 let currentView = null;
@@ -111,6 +113,8 @@ function route() {
   if (hash.startsWith("snippets")) {
     showView("snippets");
     onView.snippetsRoute?.(hash.split("/")[1]);
+  } else if (hash === "journal") {
+    showView("journal");
   } else {
     activate(hash || store.get("tab", "json"));
   }
@@ -145,7 +149,10 @@ const palette = { el: $("#palette"), input: $("#paletteIn"), list: $("#paletteLi
 const PALETTE_STATIC = [
   ...TOOLS.map((t) => ({ kind: "tool", id: t.id, title: t.title, desc: t.desc, icon: t.icon })),
   { kind: "view", id: "snippets", title: "Сниппеты", desc: "Модуль", icon: "snippet" },
+  { kind: "view", id: "journal", title: "Дневник", desc: "Модуль", icon: "journal" },
   { kind: "action", id: "new-snippet", title: "Новый сниппет", desc: "Действие", icon: "plus" },
+  { kind: "action", id: "log", title: "Записать в дневник", desc: "Действие", icon: "journal" },
+  { kind: "action", id: "standup", title: "Скопировать отчёт к стендапу", desc: "Действие", icon: "copy" },
 ];
 function renderPalette() {
   const q = palette.input.value.trim().toLowerCase();
@@ -176,7 +183,9 @@ function runPaletteItem(item) {
   closePalette();
   if (item.kind === "tool") activate(item.id);
   else if (item.kind === "view") location.hash = item.id;
-  else if (item.kind === "action") { location.hash = "snippets"; setTimeout(() => onView.newSnippet?.(), 0); }
+  else if (item.id === "new-snippet") { location.hash = "snippets"; setTimeout(() => onView.newSnippet?.(), 0); }
+  else if (item.id === "log") { location.hash = "journal"; setTimeout(() => onView.focusJournal?.(), 50); }
+  else if (item.id === "standup") onView.copyStandup?.();
   else if (item.kind === "snippet") onView.copySnippet?.(item.snippet);
 }
 function openPalette() { palette.el.hidden = false; palette.input.value = ""; palette.sel = 0; palette.snippets = []; renderPalette(); palette.input.focus(); }
@@ -510,4 +519,5 @@ const SAMPLES = {
   }
 })();
 runRe();
-// route() runs from snippets.js once that module has registered its hooks.
+// Modules (snippets.js, journal.js) register their hooks first; route once everything is loaded.
+document.addEventListener("DOMContentLoaded", route);

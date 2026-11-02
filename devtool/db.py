@@ -30,6 +30,25 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX idx_snippet_tags_tag ON snippet_tags(tag);
     """,
+    # 2 — journal + settings
+    """
+    CREATE TABLE journal (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        text         TEXT    NOT NULL,
+        kind         TEXT    NOT NULL DEFAULT 'done',
+        day          TEXT    NOT NULL,
+        created_at   TEXT    NOT NULL,
+        project      TEXT,
+        repo_path    TEXT,
+        branch       TEXT,
+        completed_at TEXT
+    );
+    CREATE INDEX idx_journal_day ON journal(day);
+    CREATE TABLE settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+    """,
 ]
 
 

@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import threading
 import webbrowser
+from datetime import timedelta
 from typing import Optional
 
 import typer
 
-from . import __version__, clipboard, db, snippets, tools
+from . import __version__, clipboard, db, gitinfo, journal, settings, snippets, tools
 
 app = typer.Typer(
     help="Dev Toolkit — локальный набор утилит для программиста.",
@@ -356,6 +358,133 @@ def snip_import(file: str = typer.Argument(..., help="JSON-файл или '-' �
 def snip_path() -> None:
     """Показать путь к базе данных."""
     typer.echo(db.db_path())
+
+
+# ----------------------------------------------------------------- Journal
+
+KIND_STYLE = {
+    "done": ("✓", typer.colors.GREEN),
+    "plan": ("○", typer.colors.BLUE),
+    "blocker": ("!", typer.colors.RED),
+    "note": ("•", typer.colors.BRIGHT_BLACK),
+}
+
+
+def _entry_line(e: dict) -> str:
+    icon, color = KIND_STYLE[e["kind"]]
+    if e["kind"] == "plan" and e["completed"]:
+        icon, color = "✓", typer.colors.GREEN
+    t = e["created_at"][11:16]
+    meta = ""
+    if e["project"]:
+        meta = f"{e['project']}" + (f"@{e['branch']}" if e["branch"] else "")
+        meta = " " + typer.style(meta, fg=typer.colors.CYAN)
+    sid = typer.style(f"#{e['id']}", fg=typer.colors.BRIGHT_BLACK)
+    text = typer.style(e["text"], dim=True) if e["completed"] and e["kind"] == "plan" else e["text"]
+    return f"  {typer.style(icon, fg=color, bold=True)} {typer.style(t, fg=typer.colors.BRIGHT_BLACK)} {text}{meta} {sid}"
+
+
+@app.command("log")
+def log_cmd(
+    text: list[str] = typer.Argument(..., help="Что сделано. Можно без кавычек."),
+    plan: bool = typer.Option(False, "--plan", "-p", help="Это план на сегодня."),
+    blocker: bool = typer.Option(False, "--blocker", "-b", help="Это блокер / проблема."),
+    note: bool = typer.Option(False, "--note", "-n", help="Просто заметка."),
+    yesterday: bool = typer.Option(False, "--yesterday", "-y", help="Записать на вчера."),
+) -> None:
+    """Быстрая запись в дневник: devtool log починил баг с логином."""
+    kind = "plan" if plan else "blocker" if blocker else "note" if note else "done"
+    day = journal.today() - timedelta(days=1) if yesterday else None
+    e = _db_call(journal.add, " ".join(text), kind, cwd=os.getcwd(), day=day)
+    where = f" → {e['project']}" + (f"@{e['branch']}" if e["branch"] else "") if e["project"] else ""
+    typer.secho(f"✓ {journal.KIND_LABELS[kind]} записано (#{e['id']}){where}", fg=typer.colors.GREEN)
+
+
+@app.command("standup")
+def standup_cmd(
+    fmt: str = typer.Option("text", "--format", "-f", help="text | md | slack"),
+    copy: bool = typer.Option(False, "--copy", "-c", help="Скопировать в буфер обмена."),
+    date_: Optional[str] = typer.Option(None, "--date", "-d", help="Дата стендапа (YYYY-MM-DD), по умолчанию сегодня."),
+) -> None:
+    """Отчёт к стендапу: вчера / сегодня / блокеры (+ ваши коммиты)."""
+    r = _db_call(journal.standup, for_day=date_, fmt=fmt)
+    typer.echo(r["text"], nl=False)
+    if copy:
+        if clipboard.copy(r["text"]):
+            typer.secho("✓ Скопировано в буфер обмена", fg=typer.colors.GREEN, err=True)
+        else:
+            typer.secho("Буфер обмена недоступен", fg=typer.colors.YELLOW, err=True)
+
+
+journal_app = typer.Typer(help="Дневник разработчика.", no_args_is_help=True)
+app.add_typer(journal_app, name="journal")
+
+
+@journal_app.command("show")
+def journal_show(
+    days: int = typer.Option(7, "--days", "-d", help="За сколько дней."),
+    project: Optional[str] = typer.Option(None, "--project", "-p", help="Фильтр по проекту."),
+    commits: bool = typer.Option(True, "--commits/--no-commits", help="Показывать коммиты."),
+) -> None:
+    """Показать записи за последние дни."""
+    r = _db_call(journal.timeline, days=days, project=project, with_commits=commits)
+    shown = False
+    for d in r["days"]:
+        if not d["entries"] and not d["commits"]:
+            continue
+        shown = True
+        typer.secho(f"\n{d['label']}  {typer.style(d['date'], fg=typer.colors.BRIGHT_BLACK)}", bold=True)
+        for e in d["entries"]:
+            typer.echo(_entry_line(e))
+        for c in d["commits"]:
+            typer.echo(f"  {typer.style('⎇', fg=typer.colors.MAGENTA)} {c['time'][11:16]} "
+                       f"{typer.style(c['subject'], fg=typer.colors.BRIGHT_BLACK)} {typer.style(c['project'], fg=typer.colors.CYAN)}")
+    if not shown:
+        typer.secho("Записей пока нет. Начните с: devtool log \"что сделали\"", fg=typer.colors.YELLOW)
+
+
+@journal_app.command("done")
+def journal_done(entry_id: int = typer.Argument(...)) -> None:
+    """Отметить план или блокер выполненным / решённым."""
+    e = _db_call(journal.update, entry_id, {"completed": True})
+    typer.secho(f"✓ Готово: {e['text']}", fg=typer.colors.GREEN)
+
+
+@journal_app.command("rm")
+def journal_rm(entry_id: int = typer.Argument(...)) -> None:
+    """Удалить запись."""
+    _db_call(journal.delete, entry_id)
+    typer.secho(f"✓ #{entry_id} удалена", fg=typer.colors.GREEN)
+
+
+@journal_app.command("roots")
+def journal_roots(
+    add: list[str] = typer.Option([], "--add", "-a", help="Добавить папку с проектами."),
+    remove: list[str] = typer.Option([], "--remove", "-r", help="Убрать папку."),
+) -> None:
+    """Папки, в которых искать git-репозитории для коммитов в отчёте."""
+    from pathlib import Path
+
+    with db.session() as conn:
+        roots = settings.get(conn, "git_roots")
+        for a in add:
+            p = Path(a).expanduser().resolve()
+            if not p.is_dir():
+                typer.secho(f"✗ Папка не найдена: {a}", fg=typer.colors.RED, err=True)
+                raise typer.Exit(1)
+            if str(p) not in roots:
+                roots.append(str(p))
+        for r in remove:
+            rp = str(Path(r).expanduser().resolve())
+            roots = [x for x in roots if x != rp and x != r]
+        settings.set(conn, "git_roots", roots)
+    if not roots:
+        typer.echo("Папки не заданы. Пример: devtool journal roots --add ~/projects")
+        return
+    for r in roots:
+        typer.echo(typer.style(r, bold=True))
+        for repo in gitinfo.find_repos([r]):
+            typer.echo("  " + typer.style("⎇ ", fg=typer.colors.MAGENTA) + repo)
 
 
 if __name__ == "__main__":  # pragma: no cover
