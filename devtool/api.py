@@ -5,15 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Callable
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import __version__, tools
+from . import __version__, db, snippets, tools
 
 STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="Dev Toolkit", version=__version__, docs_url="/api/docs", redoc_url=None)
+
+
+@app.exception_handler(snippets.NotFound)
+async def _not_found_handler(_: Request, exc: snippets.NotFound) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"error": exc.to_dict()})
 
 
 @app.exception_handler(tools.ToolError)
@@ -80,6 +85,90 @@ async def run_tool(name: str, request: Request) -> dict[str, Any]:
         if isinstance(exc, tools.ToolError):
             raise
         raise tools.ToolError(f"Некорректные параметры: {exc}") from exc
+
+
+# ------------------------------------------------------------------ Snippets
+
+
+def get_db():
+    with db.session() as conn:
+        yield conn
+
+
+async def _json_body(request: Request) -> Any:
+    try:
+        return await request.json()
+    except ValueError as exc:
+        raise tools.ToolError("Тело запроса должно быть корректным JSON") from exc
+
+
+async def _object_body(request: Request) -> dict[str, Any]:
+    body = await _json_body(request)
+    if not isinstance(body, dict):
+        raise tools.ToolError("Тело запроса должно быть JSON-объектом")
+    return body
+
+
+@app.get("/api/snippets")
+def list_snippets(
+    q: str = "",
+    tag: list[str] = Query(default=[]),
+    lang: str | None = None,
+    favorite: bool = False,
+    sort: str = "recent",
+    conn=Depends(get_db),
+) -> dict[str, Any]:
+    items = snippets.search(conn, q, tags=tag, language=lang or None, favorite=favorite, sort=sort)
+    return {"items": items, "count": len(items)}
+
+
+@app.get("/api/snippets/meta")
+def snippets_meta(conn=Depends(get_db)) -> dict[str, Any]:
+    return {"tags": snippets.all_tags(conn), "languages": snippets.LANGUAGES, "stats": snippets.stats(conn)}
+
+
+@app.get("/api/snippets/export")
+def export_snippets(conn=Depends(get_db)) -> JSONResponse:
+    return JSONResponse(
+        snippets.export_all(conn),
+        headers={"Content-Disposition": 'attachment; filename="devtool-snippets.json"'},
+    )
+
+
+@app.post("/api/snippets/import")
+async def import_snippets(request: Request, conn=Depends(get_db)) -> dict[str, int]:
+    return snippets.import_all(conn, await _json_body(request))
+
+
+@app.post("/api/snippets/examples")
+def add_examples(conn=Depends(get_db)) -> dict[str, int]:
+    return snippets.add_examples(conn)
+
+
+@app.post("/api/snippets", status_code=201)
+async def create_snippet(request: Request, conn=Depends(get_db)) -> dict[str, Any]:
+    return snippets.create(conn, await _object_body(request))
+
+
+@app.get("/api/snippets/{snippet_id}")
+def get_snippet(snippet_id: int, conn=Depends(get_db)) -> dict[str, Any]:
+    return snippets.get(conn, snippet_id)
+
+
+@app.patch("/api/snippets/{snippet_id}")
+async def update_snippet(snippet_id: int, request: Request, conn=Depends(get_db)) -> dict[str, Any]:
+    return snippets.update(conn, snippet_id, await _object_body(request))
+
+
+@app.delete("/api/snippets/{snippet_id}", status_code=204)
+def delete_snippet(snippet_id: int, conn=Depends(get_db)) -> Response:
+    snippets.delete(conn, snippet_id)
+    return Response(status_code=204)
+
+
+@app.post("/api/snippets/{snippet_id}/use")
+def use_snippet(snippet_id: int, conn=Depends(get_db)) -> dict[str, Any]:
+    return snippets.mark_used(conn, snippet_id)
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

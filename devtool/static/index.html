@@ -20,19 +20,19 @@
       </div>
       <div>
         <div class="brand-name">Dev Toolkit</div>
-        <div class="brand-sub">v0.1 · офлайн</div>
+        <div class="brand-sub">v0.2 · офлайн</div>
       </div>
     </div>
 
     <nav class="nav">
       <div class="nav-label">Модули</div>
-      <a class="nav-item active" href="#">
+      <a class="nav-item" href="#json" data-view="utils">
         <svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>
         Утилиты
       </a>
-      <a class="nav-item disabled" title="Этап 2">
+      <a class="nav-item" href="#snippets" data-view="snippets">
         <svg viewBox="0 0 24 24"><path d="M8 4h8l4 4v12H4V4h4zM8 4v4h8"/><path d="M8 13h8M8 17h5"/></svg>
-        Сниппеты <span class="soon">скоро</span>
+        Сниппеты <span class="count" id="snipCount"></span>
       </a>
       <a class="nav-item disabled" title="Этап 3">
         <svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg>
@@ -60,12 +60,13 @@
   <main class="main">
     <header class="page-head">
       <div>
-        <h1>Утилиты</h1>
-        <p class="muted">Всё работает локально, данные не покидают ваш компьютер.</p>
+        <h1 id="pageTitle">Утилиты</h1>
+        <p class="muted" id="pageSub">Всё работает локально, данные не покидают ваш компьютер.</p>
       </div>
       <div class="status-pill" id="status"><span class="dot"></span><span>сервер</span></div>
     </header>
 
+    <div class="view" id="view-utils">
     <div class="tool-tabs" role="tablist" id="tabs"></div>
 
     <!-- JSON -->
@@ -238,18 +239,73 @@
         </div>
       </div>
     </section>
+    </div><!-- /view-utils -->
+
+    <!-- ============================== SNIPPETS ============================== -->
+    <div class="view" id="view-snippets" hidden>
+      <div class="toolbar snip-toolbar">
+        <div class="stat-chips" id="snipStats"></div>
+        <div class="spacer"></div>
+        <label class="btn ghost" title="Импорт из JSON">
+          <svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>Импорт
+          <input type="file" id="snipImport" accept="application/json,.json" hidden>
+        </label>
+        <a class="btn ghost" href="/api/snippets/export" download title="Экспорт в JSON">
+          <svg viewBox="0 0 24 24"><path d="M12 15V4M7 9l5-5 5 5M5 20h14"/></svg>Экспорт
+        </a>
+        <button class="btn primary" id="snipNew" title="Новый сниппет (N)">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Новый
+        </button>
+      </div>
+
+      <div class="snip-layout">
+        <div class="snip-side">
+          <div class="search-box">
+            <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
+            <input id="snipSearch" placeholder="Поиск…  #тег  lang:python" autocomplete="off" spellcheck="false">
+            <kbd>/</kbd>
+          </div>
+          <div class="snip-filters">
+            <select id="snipLang" class="input"><option value="">Все языки</option></select>
+            <select id="snipSort" class="input">
+              <option value="recent">Недавние</option>
+              <option value="popular">Популярные</option>
+              <option value="title">По алфавиту</option>
+              <option value="created">По дате создания</option>
+            </select>
+            <button class="chip-btn" id="snipFavOnly" title="Только избранное">★</button>
+          </div>
+          <div class="tag-cloud" id="snipTags"></div>
+          <div class="snip-list" id="snipList"></div>
+        </div>
+        <div class="snip-main" id="snipMain"></div>
+      </div>
+    </div>
   </main>
 </div>
 
 <!-- Command palette -->
 <div class="palette-backdrop" id="palette" hidden>
   <div class="palette">
-    <input id="paletteIn" placeholder="Найти инструмент..." autocomplete="off">
+    <input id="paletteIn" placeholder="Инструмент или сниппет…" autocomplete="off">
     <div class="palette-list" id="paletteList"></div>
+  </div>
+</div>
+
+<!-- Confirm dialog -->
+<div class="palette-backdrop" id="confirm" hidden>
+  <div class="dialog">
+    <div class="dialog-title" id="confirmTitle"></div>
+    <div class="muted" id="confirmText"></div>
+    <div class="dialog-actions">
+      <button class="btn ghost" id="confirmNo">Отмена</button>
+      <button class="btn danger" id="confirmYes">Удалить</button>
+    </div>
   </div>
 </div>
 
 <div class="toasts" id="toasts"></div>
 <script src="/static/app.js"></script>
+<script src="/static/snippets.js"></script>
 </body>
 </html>

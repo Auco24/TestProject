@@ -25,3 +25,25 @@ def test_b64_and_ts_and_uuid():
 def test_regex_and_hash():
     assert "Совпадений: 2" in runner.invoke(app, ["regex", r"\d+", "a1 b22"]).stdout
     assert runner.invoke(app, ["hash", "abc", "-a", "md5"]).stdout.strip() == "900150983cd24fb0d6963f7d28e17f72"
+
+
+def test_snip_flow(tmp_path):
+    r = runner.invoke(app, ["snip", "add", "git status -sb", "-t", "Short status", "-g", "git"])
+    assert r.exit_code == 0 and "#1" in r.stdout
+    r = runner.invoke(app, ["snip", "add", "-", "-t", "Py", "-l", "python", "--fav"], input="print('x')\n")
+    assert r.exit_code == 0
+
+    out = runner.invoke(app, ["snip", "find", "status"]).stdout
+    assert "Short status" in out and "Py" not in out
+    assert "Py" in runner.invoke(app, ["snip", "find", "lang:python"]).stdout
+    assert runner.invoke(app, ["snip", "show", "1", "--raw"]).stdout == "git status -sb\n"
+    assert "#git" in runner.invoke(app, ["snip", "tags"]).stdout
+    assert runner.invoke(app, ["snip", "copy", "1"]).exit_code == 0
+
+    export = tmp_path / "s.json"
+    assert runner.invoke(app, ["snip", "export", str(export)]).exit_code == 0
+    assert "пропущено дубликатов: 2" in runner.invoke(app, ["snip", "import", str(export)]).stdout
+
+    assert runner.invoke(app, ["snip", "rm", "1", "-y"]).exit_code == 0
+    assert runner.invoke(app, ["snip", "show", "1"]).exit_code == 1
+    assert "Ничего не найдено" in runner.invoke(app, ["snip", "find", "status"]).stdout

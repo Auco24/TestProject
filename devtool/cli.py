@@ -10,7 +10,7 @@ from typing import Optional
 
 import typer
 
-from . import __version__, tools
+from . import __version__, clipboard, db, snippets, tools
 
 app = typer.Typer(
     help="Dev Toolkit — локальный набор утилит для программиста.",
@@ -186,6 +186,176 @@ def password_cmd(
     r = _run(tools.generate_password, length, symbols=not no_symbols, exclude_ambiguous=no_ambiguous)
     typer.echo(r["password"])
     typer.secho(f"энтропия {r['entropy']} бит — {r['strength']}", fg=typer.colors.BRIGHT_BLACK, err=True)
+
+
+# ---------------------------------------------------------------- Snippets
+
+snip_app = typer.Typer(help="Сниппеты: сохраняйте и находите команды и куски кода.", no_args_is_help=True)
+app.add_typer(snip_app, name="snip")
+
+LANG_COLORS = {"bash": "green", "python": "yellow", "javascript": "bright_yellow", "sql": "cyan", "docker": "blue"}
+
+
+def _snip_line(s: dict) -> str:
+    star = typer.style("★ ", fg="yellow") if s["favorite"] else "  "
+    sid = typer.style(f"#{s['id']:<4}", fg="bright_black")
+    lang = typer.style(f"[{s['language']}]", fg=LANG_COLORS.get(s["language"], "magenta"))
+    tags = typer.style(" ".join("#" + t for t in s["tags"]), fg="cyan")
+    first = s["content"].splitlines()[0] if s["content"] else ""
+    if len(first) > 70:
+        first = first[:67] + "..."
+    preview = typer.style(f"\n        {first}", fg="bright_black")
+    return f"{star}{sid} {typer.style(s['title'], bold=True)} {lang} {tags}{preview}"
+
+
+def _db_call(fn, *args, **kwargs):
+    with db.session() as conn:
+        return _run(fn, conn, *args, **kwargs)
+
+
+@snip_app.command("add")
+def snip_add(
+    content: Optional[str] = typer.Argument(None, help="Текст сниппета или '-' для stdin. Пусто — откроется $EDITOR."),
+    title: Optional[str] = typer.Option(None, "--title", "-t", help="Название."),
+    tag: list[str] = typer.Option([], "--tag", "-g", help="Тег (можно несколько раз или через запятую)."),
+    lang: str = typer.Option("bash", "--lang", "-l", help="Язык: " + ", ".join(snippets.LANGUAGES)),
+    desc: str = typer.Option("", "--desc", "-d", help="Описание."),
+    fav: bool = typer.Option(False, "--fav", "-f", help="Добавить в избранное."),
+) -> None:
+    """Добавить сниппет."""
+    if content is None and sys.stdin.isatty():
+        content = typer.edit("") or ""
+    else:
+        content = _input(content)
+    if not title:
+        first = content.strip().splitlines()[0] if content.strip() else ""
+        title = typer.prompt("Название", default=first[:60] or None) if sys.stdin.isatty() else first[:60]
+    s = _db_call(
+        snippets.create,
+        {"title": title, "content": content, "language": lang, "tags": ",".join(tag), "description": desc, "favorite": fav},
+    )
+    typer.secho(f"✓ Сохранено как #{s['id']}", fg=typer.colors.GREEN)
+
+
+@snip_app.command("find")
+@snip_app.command("ls", hidden=True)
+def snip_find(
+    query: list[str] = typer.Argument(None, help="Слова для поиска. #tag — фильтр по тегу, lang:python — по языку."),
+    fav: bool = typer.Option(False, "--fav", "-f", help="Только избранное."),
+    sort: str = typer.Option("recent", "--sort", "-s", help="recent | popular | title | created"),
+    limit: int = typer.Option(30, "--limit", "-n"),
+) -> None:
+    """Найти сниппеты (без аргументов — показать все)."""
+    items = _db_call(snippets.search, " ".join(query or []), favorite=fav, sort=sort, limit=limit)
+    if not items:
+        typer.secho("Ничего не найдено.", fg=typer.colors.YELLOW)
+        raise typer.Exit(0)
+    for s in items:
+        typer.echo(_snip_line(s))
+
+
+@snip_app.command("show")
+def snip_show(
+    snippet_id: int = typer.Argument(...),
+    raw: bool = typer.Option(False, "--raw", "-r", help="Только содержимое, без оформления."),
+) -> None:
+    """Показать сниппет."""
+    s = _db_call(snippets.get, snippet_id)
+    if raw:
+        typer.echo(s["content"])
+        return
+    typer.echo(_snip_line(s).split("\n")[0])
+    if s["description"]:
+        typer.secho(s["description"], fg="bright_black")
+    typer.echo(typer.style("─" * 60, fg="bright_black"))
+    typer.echo(s["content"])
+    typer.echo(typer.style("─" * 60, fg="bright_black"))
+    typer.secho(f"использован {s['use_count']} раз · изменён {s['updated_at']}", fg="bright_black")
+
+
+@snip_app.command("copy")
+@snip_app.command("cp", hidden=True)
+def snip_copy(snippet_id: int = typer.Argument(...)) -> None:
+    """Скопировать сниппет в буфер обмена."""
+    s = _db_call(snippets.mark_used, snippet_id)
+    if clipboard.copy(s["content"]):
+        typer.secho(f"✓ «{s['title']}» скопирован в буфер обмена", fg=typer.colors.GREEN)
+    else:
+        typer.secho("Буфер обмена недоступен, вывожу в консоль:", fg=typer.colors.YELLOW, err=True)
+        typer.echo(s["content"])
+
+
+@snip_app.command("edit")
+def snip_edit(snippet_id: int = typer.Argument(...)) -> None:
+    """Отредактировать содержимое в $EDITOR."""
+    s = _db_call(snippets.get, snippet_id)
+    new = typer.edit(s["content"])
+    if new is None or new.rstrip("\n") == s["content"]:
+        typer.echo("Без изменений.")
+        return
+    _db_call(snippets.update, snippet_id, {"content": new})
+    typer.secho(f"✓ #{snippet_id} обновлён", fg=typer.colors.GREEN)
+
+
+@snip_app.command("fav")
+def snip_fav(snippet_id: int = typer.Argument(...)) -> None:
+    """Добавить в избранное / убрать из избранного."""
+    s = _db_call(snippets.get, snippet_id)
+    s = _db_call(snippets.update, snippet_id, {"favorite": not s["favorite"]})
+    typer.echo(("★ В избранном: " if s["favorite"] else "☆ Убран из избранного: ") + s["title"])
+
+
+@snip_app.command("rm")
+def snip_rm(
+    snippet_id: int = typer.Argument(...),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Не спрашивать подтверждение."),
+) -> None:
+    """Удалить сниппет."""
+    s = _db_call(snippets.get, snippet_id)
+    if not yes and not typer.confirm(f"Удалить «{s['title']}»?"):
+        raise typer.Abort()
+    _db_call(snippets.delete, snippet_id)
+    typer.secho(f"✓ #{snippet_id} удалён", fg=typer.colors.GREEN)
+
+
+@snip_app.command("tags")
+def snip_tags() -> None:
+    """Показать все теги."""
+    for t in _db_call(snippets.all_tags):
+        typer.echo(f"{typer.style('#' + t['tag'], fg='cyan')} {typer.style(str(t['count']), fg='bright_black')}")
+
+
+@snip_app.command("export")
+def snip_export(
+    file: Optional[str] = typer.Argument(None, help="Файл. Без аргумента — в stdout."),
+) -> None:
+    """Экспортировать все сниппеты в JSON."""
+    data = json.dumps(_db_call(snippets.export_all), indent=2, ensure_ascii=False)
+    if file:
+        with open(file, "w", encoding="utf-8") as fh:
+            fh.write(data)
+        typer.secho(f"✓ Сохранено в {file}", fg=typer.colors.GREEN)
+    else:
+        typer.echo(data)
+
+
+@snip_app.command("import")
+def snip_import(file: str = typer.Argument(..., help="JSON-файл или '-' для stdin.")) -> None:
+    """Импортировать сниппеты из JSON (дубликаты пропускаются)."""
+    raw = sys.stdin.read() if file == "-" else open(file, encoding="utf-8").read()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        typer.secho(f"✗ Некорректный JSON: {exc}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1) from exc
+    r = _db_call(snippets.import_all, data)
+    typer.secho(f"✓ Добавлено: {r['added']}, пропущено дубликатов: {r['skipped']}", fg=typer.colors.GREEN)
+
+
+@snip_app.command("path")
+def snip_path() -> None:
+    """Показать путь к базе данных."""
+    typer.echo(db.db_path())
 
 
 if __name__ == "__main__":  # pragma: no cover

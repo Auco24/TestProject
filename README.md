@@ -17,7 +17,23 @@
 | **Regex** | живая подсветка совпадений, группы и именованные группы, флаги `i m s x` |
 | **Генераторы** | надёжные пароли с оценкой энтропии, UUID v4, хэши MD5/SHA1/SHA256/SHA512 |
 
-Следующие модули: **Сниппеты**, **Дневник разработчика**, **Git-дашборд**.
+### 📋 Сниппеты
+
+Храните команды и куски кода, которые постоянно гуглите, и находите их за секунду.
+
+![Snippets](docs/screenshots/snippets.png)
+
+- поиск по всем полям; `#тег` фильтрует по тегу, `lang:python` по языку;
+- теги, избранное, сортировка по недавним, популярным или алфавиту;
+- подсветка синтаксиса для 18 языков, номера строк;
+- счётчик использований: часто копируемые сниппеты поднимаются выше;
+- **`Ctrl+K` из любого места** ищет и сразу копирует сниппет;
+- импорт и экспорт в JSON, набор полезных примеров для старта;
+- данные хранятся в SQLite: `~/.devtool/devtool.sqlite3`, путь меняется через переменную `DEVTOOL_DB`.
+
+Горячие клавиши в модуле: `/` поиск · `↑↓` или `j`/`k` навигация · `Enter` копировать · `N` новый · `E` редактировать · `F` избранное · `Ctrl+Enter` сохранить · `Esc` отмена.
+
+Следующие модули: **Дневник разработчика**, **Git-дашборд**.
 
 <details>
 <summary>Ещё скриншоты</summary>
@@ -25,6 +41,8 @@
 ![JWT](docs/screenshots/jwt.png)
 ![Regex](docs/screenshots/regex.png)
 ![Generators](docs/screenshots/generators-light.png)
+![Snippet editor](docs/screenshots/snippets-editor.png)
+![Command palette](docs/screenshots/palette.png)
 
 </details>
 
@@ -65,6 +83,22 @@ devtool uuid -n 5                          # 5 UUID
 devtool pass -l 32                         # пароль из 32 символов
 ```
 
+### Сниппеты в терминале
+
+```bash
+devtool snip add "docker ps -a" -t "Все контейнеры" -g docker
+cat script.sh | devtool snip add - -t "Деплой" -l bash -g deploy
+devtool snip add                           # откроет $EDITOR
+devtool snip find docker                   # поиск
+devtool snip find "#git" --sort popular    # по тегу, популярные сверху
+devtool snip show 3                        # показать
+devtool snip copy 3                        # в буфер обмена
+devtool snip edit 3                        # редактировать в $EDITOR
+devtool snip fav 3 / rm 3 / tags
+devtool snip export backup.json            # экспорт
+devtool snip import backup.json            # импорт (дубликаты пропускаются)
+```
+
 `devtool --help` и `devtool <команда> --help` показывают все опции.
 
 ## Разработка
@@ -80,10 +114,15 @@ API-документация (Swagger) открывается на <http://127.0
 
 ```
 devtool/
-├── tools.py        # вся логика: чистые функции без зависимостей
-├── api.py          # FastAPI: /api/tools/<name> + раздача интерфейса
+├── tools.py        # утилиты: чистые функции без зависимостей
+├── db.py           # SQLite: подключение и миграции
+├── snippets.py     # сниппеты: CRUD, поиск, теги, импорт/экспорт
+├── clipboard.py    # буфер обмена без внешних зависимостей
+├── api.py          # FastAPI: /api/tools/*, /api/snippets/* + интерфейс
 ├── cli.py          # Typer CLI
 └── static/         # интерфейс: HTML + CSS + JS, без внешних CDN
+    ├── app.js      #   утилиты, навигация, Ctrl+K
+    └── snippets.js #   модуль сниппетов + подсветка синтаксиса
 tests/              # pytest: tools, API, CLI
 ```
 

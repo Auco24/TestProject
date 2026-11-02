@@ -76,13 +76,49 @@ const ICONS = {
   code: '<path d="M4 7V5h16v2M9 19h6M12 5v14"/>',
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/>',
   regex: '<path d="M17 3v10M12.7 5.5l8.6 5M12.7 10.5l8.6-5"/><rect x="3" y="15" width="6" height="6" rx="1.5"/>',
+  snippet: '<path d="M8 4h8l4 4v12H4V4h4zM8 4v4h8"/><path d="M8 13h8M8 17h5"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>',
+  star: '<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z"/>',
 };
 const svg = (name) => `<svg viewBox="0 0 24 24">${ICONS[name] || ""}</svg>`;
 const TOOLS = $$(".tool").map((el) => ({ id: el.dataset.tool, title: el.dataset.title, desc: el.dataset.desc, icon: el.dataset.icon, el }));
 const onActivate = {};
 
+const VIEWS = {
+  utils: { title: "Утилиты", sub: "Всё работает локально, данные не покидают ваш компьютер." },
+  snippets: { title: "Сниппеты", sub: "Команды и куски кода, которые всегда под рукой." },
+};
+const onView = {};
+let currentView = null;
+
+function showView(name) {
+  if (!VIEWS[name]) name = "utils";
+  $$(".view").forEach((v) => (v.hidden = v.id !== "view-" + name));
+  $$(".nav-item[data-view]").forEach((a) => a.classList.toggle("active", a.dataset.view === name));
+  $("#pageTitle").textContent = VIEWS[name].title;
+  $("#pageSub").textContent = VIEWS[name].sub;
+  const changed = currentView !== name;
+  currentView = name;
+  if (changed) onView[name]?.();
+}
+
+function route() {
+  const hash = decodeURIComponent(location.hash.slice(1));
+  if (hash.startsWith("snippets")) {
+    showView("snippets");
+    onView.snippetsRoute?.(hash.split("/")[1]);
+  } else {
+    activate(hash || store.get("tab", "json"));
+  }
+}
+window.addEventListener("hashchange", route);
+
 function activate(id) {
+  showView("utils");
   const tool = TOOLS.find((t) => t.id === id) || TOOLS[0];
   TOOLS.forEach((t) => t.el.classList.toggle("active", t === tool));
   $$(".tab").forEach((b) => b.classList.toggle("active", b.dataset.tool === tool.id));
@@ -104,24 +140,53 @@ $("#themeToggle").addEventListener("click", () => {
   store.set("theme", next);
 });
 
-// Command palette (Ctrl/Cmd+K)
-const palette = { el: $("#palette"), input: $("#paletteIn"), list: $("#paletteList"), sel: 0, items: [] };
+// Command palette (Ctrl/Cmd+K): tools, modules and snippets
+const palette = { el: $("#palette"), input: $("#paletteIn"), list: $("#paletteList"), sel: 0, items: [], snippets: [] };
+const PALETTE_STATIC = [
+  ...TOOLS.map((t) => ({ kind: "tool", id: t.id, title: t.title, desc: t.desc, icon: t.icon })),
+  { kind: "view", id: "snippets", title: "Сниппеты", desc: "Модуль", icon: "snippet" },
+  { kind: "action", id: "new-snippet", title: "Новый сниппет", desc: "Действие", icon: "plus" },
+];
 function renderPalette() {
   const q = palette.input.value.trim().toLowerCase();
-  palette.items = TOOLS.filter((t) => (t.title + " " + t.desc).toLowerCase().includes(q));
+  palette.items = [
+    ...PALETTE_STATIC.filter((t) => (t.title + " " + t.desc).toLowerCase().includes(q)),
+    ...palette.snippets.map((s) => ({ kind: "snippet", id: s.id, title: s.title, desc: "копировать · " + s.language, icon: "copy", snippet: s })),
+  ];
   palette.sel = Math.min(palette.sel, Math.max(0, palette.items.length - 1));
-  palette.list.innerHTML = palette.items.map((t, i) =>
-    `<div class="palette-item${i === palette.sel ? " sel" : ""}" data-i="${i}"><span class="tab-ico">${svg(t.icon)}</span><b>${t.title}</b><small>${t.desc}</small></div>`
-  ).join("") || '<div class="palette-item muted">Ничего не найдено</div>';
+  let lastKind = null;
+  palette.list.innerHTML = palette.items.map((t, i) => {
+    let head = "";
+    if (t.kind === "snippet" && lastKind !== "snippet") head = '<div class="palette-group">Сниппеты</div>';
+    lastKind = t.kind;
+    return `${head}<div class="palette-item${i === palette.sel ? " sel" : ""}" data-i="${i}"><span class="tab-ico">${svg(t.icon)}</span><b>${esc(t.title)}</b><small>${esc(t.desc)}</small></div>`;
+  }).join("") || '<div class="palette-item muted">Ничего не найдено</div>';
+  $(".palette-item.sel", palette.list)?.scrollIntoView({ block: "nearest" });
 }
-function openPalette() { palette.el.hidden = false; palette.input.value = ""; palette.sel = 0; renderPalette(); palette.input.focus(); }
+const searchPaletteSnippets = debounce(async () => {
+  const q = palette.input.value.trim();
+  if (!q) { palette.snippets = []; renderPalette(); return; }
+  try {
+    const r = await (await fetch("/api/snippets?q=" + encodeURIComponent(q))).json();
+    palette.snippets = (r.items || []).slice(0, 8);
+  } catch { palette.snippets = []; }
+  renderPalette();
+}, 150);
+function runPaletteItem(item) {
+  closePalette();
+  if (item.kind === "tool") activate(item.id);
+  else if (item.kind === "view") location.hash = item.id;
+  else if (item.kind === "action") { location.hash = "snippets"; setTimeout(() => onView.newSnippet?.(), 0); }
+  else if (item.kind === "snippet") onView.copySnippet?.(item.snippet);
+}
+function openPalette() { palette.el.hidden = false; palette.input.value = ""; palette.sel = 0; palette.snippets = []; renderPalette(); palette.input.focus(); }
 function closePalette() { palette.el.hidden = true; }
 $("#openPalette").addEventListener("click", openPalette);
 palette.el.addEventListener("click", (e) => { if (e.target === palette.el) closePalette(); });
-palette.input.addEventListener("input", () => { palette.sel = 0; renderPalette(); });
+palette.input.addEventListener("input", () => { palette.sel = 0; renderPalette(); searchPaletteSnippets(); });
 palette.list.addEventListener("click", (e) => {
   const it = e.target.closest("[data-i]");
-  if (it) { activate(palette.items[it.dataset.i].id); closePalette(); }
+  if (it) runPaletteItem(palette.items[it.dataset.i]);
 });
 document.addEventListener("keydown", (e) => {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); palette.el.hidden ? openPalette() : closePalette(); return; }
@@ -132,7 +197,7 @@ document.addEventListener("keydown", (e) => {
     const n = palette.items.length || 1;
     palette.sel = (palette.sel + (e.key === "ArrowDown" ? 1 : -1) + n) % n;
     renderPalette();
-  } else if (e.key === "Enter" && palette.items[palette.sel]) { activate(palette.items[palette.sel].id); closePalette(); }
+  } else if (e.key === "Enter" && palette.items[palette.sel]) { e.preventDefault(); runPaletteItem(palette.items[palette.sel]); }
 });
 
 /* ======================================================================
@@ -445,4 +510,4 @@ const SAMPLES = {
   }
 })();
 runRe();
-activate(location.hash.slice(1) || store.get("tab", "json"));
+// route() runs from snippets.js once that module has registered its hooks.
