@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from .gitinfo import _git
+from .i18n import tr
 from .tools import ToolError
 
 STALE_DAYS = 30
@@ -188,7 +189,7 @@ def repo_status(path: str, detailed: bool = False) -> dict[str, Any]:
     path = str(Path(path).resolve())
     raw = _git(path, "status", "--porcelain=v2", "--branch")
     if raw is None:
-        return {"path": path, "name": Path(path).name, "error": "Не удалось прочитать репозиторий", "health": "error"}
+        return {"path": path, "name": Path(path).name, "error": tr("Не удалось прочитать репозиторий"), "health": "error"}
     s = _parse_status(raw)
     files = s.pop("files")
 
@@ -268,22 +269,22 @@ def _run(path: str, *args: str, timeout_msg: str) -> str:
     except subprocess.TimeoutExpired as exc:
         raise ToolError(timeout_msg) from exc
     except OSError as exc:
-        raise ToolError(f"Не удалось запустить git: {exc}") from exc
+        raise ToolError(tr("Не удалось запустить git: {error}", error=exc)) from exc
     if r.returncode != 0:
         msg = (r.stderr or r.stdout).strip().splitlines()
-        raise ToolError(msg[-1] if msg else "git завершился с ошибкой")
+        raise ToolError(msg[-1] if msg else tr("git завершился с ошибкой"))
     return (r.stdout + r.stderr).strip()
 
 
 def fetch(path: str) -> dict[str, Any]:
-    _run(path, "fetch", "--all", "--prune", "--quiet", timeout_msg="fetch не уложился в 60 секунд")
+    _run(path, "fetch", "--all", "--prune", "--quiet", timeout_msg=tr("fetch не уложился в 60 секунд"))
     return repo_status(path)
 
 
 def fetch_many(paths: list[str]) -> dict[str, Any]:
     def one(p: str) -> dict[str, Any]:
         try:
-            _run(p, "fetch", "--all", "--prune", "--quiet", timeout_msg="таймаут")
+            _run(p, "fetch", "--all", "--prune", "--quiet", timeout_msg=tr("таймаут"))
             return {"path": p, "ok": True}
         except ToolError as exc:
             return {"path": p, "ok": False, "error": exc.message}
@@ -296,10 +297,10 @@ def fetch_many(paths: list[str]) -> dict[str, Any]:
 def pull_ff(path: str) -> dict[str, Any]:
     st = repo_status(path)
     if st["changes"]:
-        raise ToolError("Есть незакоммиченные изменения: сначала закоммитьте или уберите их в stash")
+        raise ToolError(tr("Есть незакоммиченные изменения: сначала закоммитьте или уберите их в stash"))
     if not st["upstream"]:
-        raise ToolError("У текущей ветки нет upstream")
-    _run(path, "pull", "--ff-only", "--quiet", timeout_msg="pull не уложился в 60 секунд")
+        raise ToolError(tr("У текущей ветки нет upstream"))
+    _run(path, "pull", "--ff-only", "--quiet", timeout_msg=tr("pull не уложился в 60 секунд"))
     return repo_status(path)
 
 
@@ -310,14 +311,14 @@ def delete_branches(path: str, names: list[str]) -> dict[str, Any]:
     for name in names:
         b = brs.get(name)
         if b is None:
-            errors.append({"name": name, "error": "ветка не найдена"})
+            errors.append({"name": name, "error": tr("ветка не найдена")})
         elif b["current"] or b["default"]:
-            errors.append({"name": name, "error": "нельзя удалить текущую или основную ветку"})
+            errors.append({"name": name, "error": tr("нельзя удалить текущую или основную ветку")})
         elif not b["merged"]:
-            errors.append({"name": name, "error": "ветка не слита в основную"})
+            errors.append({"name": name, "error": tr("ветка не слита в основную")})
         else:
             try:
-                _run(path, "branch", "-d", name, timeout_msg="таймаут")
+                _run(path, "branch", "-d", name, timeout_msg=tr("таймаут"))
                 deleted.append(name)
             except ToolError as exc:
                 errors.append({"name": name, "error": exc.message})

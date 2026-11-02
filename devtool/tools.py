@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from .i18n import WEEKDAYS_FULL, get_lang, relative, tr
+
 
 class ToolError(ValueError):
     """Raised when user input cannot be processed."""
@@ -38,12 +40,12 @@ class ToolError(ValueError):
 
 def _parse_json(text: str) -> Any:
     if not text.strip():
-        raise ToolError("Пустой ввод")
+        raise ToolError(tr("Пустой ввод"))
     try:
         return json.loads(text)
     except json.JSONDecodeError as exc:
         raise ToolError(
-            f"Ошибка JSON: {exc.msg} (строка {exc.lineno}, столбец {exc.colno})",
+            tr("Ошибка JSON: {msg} (строка {line}, столбец {col})", msg=exc.msg, line=exc.lineno, col=exc.colno),
             line=exc.lineno,
             col=exc.colno,
         ) from exc
@@ -81,11 +83,11 @@ def b64_decode(text: str, url_safe: bool = False) -> str:
         else:
             raw = base64.b64decode(_pad(cleaned), validate=True)
     except (binascii.Error, ValueError) as exc:
-        raise ToolError("Некорректная строка Base64") from exc
+        raise ToolError(tr("Некорректная строка Base64")) from exc
     try:
         return raw.decode("utf-8")
     except UnicodeDecodeError as exc:
-        raise ToolError("Декодированные данные не являются текстом UTF-8") from exc
+        raise ToolError(tr("Декодированные данные не являются текстом UTF-8")) from exc
 
 
 def url_encode(text: str) -> str:
@@ -104,7 +106,7 @@ def _b64url_json(part: str, name: str) -> Any:
         raw = base64.urlsafe_b64decode(_pad(part))
         return json.loads(raw)
     except (binascii.Error, ValueError) as exc:
-        raise ToolError(f"Не удалось раскодировать {name} токена") from exc
+        raise ToolError(tr("Не удалось раскодировать {name} токена", name=name)) from exc
 
 
 def _ts_info(value: Any) -> dict[str, Any] | None:
@@ -120,8 +122,8 @@ def jwt_decode(token: str) -> dict[str, Any]:
         token = token[7:].strip()
     parts = token.split(".")
     if len(parts) != 3:
-        raise ToolError("JWT должен состоять из трёх частей, разделённых точками")
-    header = _b64url_json(parts[0], "заголовок")
+        raise ToolError(tr("JWT должен состоять из трёх частей, разделённых точками"))
+    header = _b64url_json(parts[0], tr("заголовок"))
     payload = _b64url_json(parts[1], "payload")
     if not isinstance(payload, dict):
         payload = {"value": payload}
@@ -152,39 +154,9 @@ def jwt_decode(token: str) -> dict[str, Any]:
 # ------------------------------------------------------------------------ Timestamps
 
 
-def _plural(n: int, one: str, few: str, many: str) -> str:
-    n = abs(n)
-    if n % 10 == 1 and n % 100 != 11:
-        return one
-    if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14:
-        return few
-    return many
-
-
-def humanize_delta(dt: datetime, now: datetime | None = None) -> str:
+def humanize_delta(dt: datetime, now: datetime | None = None, lang: str | None = None) -> str:
     now = now or datetime.now(timezone.utc)
-    seconds = int((dt - now).total_seconds())
-    future = seconds > 0
-    seconds = abs(seconds)
-    if seconds < 10:
-        return "только что"
-    units = [
-        (365 * 86400, ("год", "года", "лет")),
-        (30 * 86400, ("месяц", "месяца", "месяцев")),
-        (86400, ("день", "дня", "дней")),
-        (3600, ("час", "часа", "часов")),
-        (60, ("минута", "минуты", "минут")),
-        (1, ("секунда", "секунды", "секунд")),
-    ]
-    for size, forms in units:
-        if seconds >= size:
-            n = seconds // size
-            word = _plural(n, *forms)
-            # accusative for feminine units: "1 минуту назад", "через 1 секунду"
-            if word in ("минута", "секунда"):
-                word = word[:-1] + "у"
-            return f"через {n} {word}" if future else f"{n} {word} назад"
-    return "только что"  # pragma: no cover
+    return relative(int((dt - now).total_seconds()), lang=lang)
 
 
 def _get_zone(tz: str) -> ZoneInfo | timezone:
@@ -193,7 +165,7 @@ def _get_zone(tz: str) -> ZoneInfo | timezone:
     try:
         return ZoneInfo(tz)
     except (ZoneInfoNotFoundError, ValueError) as exc:
-        raise ToolError(f"Неизвестный часовой пояс: {tz}") from exc
+        raise ToolError(tr("Неизвестный часовой пояс: {tz}", tz=tz)) from exc
 
 
 def timestamp_convert(value: str | int | float | None = None, tz: str = "UTC") -> dict[str, Any]:
@@ -218,7 +190,7 @@ def timestamp_convert(value: str | int | float | None = None, tz: str = "UTC") -
         try:
             dt = datetime.fromtimestamp(num, tz=timezone.utc)
         except (OverflowError, OSError, ValueError) as exc:
-            raise ToolError("Значение timestamp вне допустимого диапазона") from exc
+            raise ToolError(tr("Значение timestamp вне допустимого диапазона")) from exc
     else:
         iso = text.replace(" ", "T", 1)
         if iso.endswith("Z"):
@@ -227,7 +199,7 @@ def timestamp_convert(value: str | int | float | None = None, tz: str = "UTC") -
             dt = datetime.fromisoformat(iso)
         except ValueError as exc:
             raise ToolError(
-                "Не удалось распознать дату. Примеры: 1730505600, 2026-11-02 12:00, 2026-11-02T12:00:00Z"
+                tr("Не удалось распознать дату. Примеры: 1730505600, 2026-11-02 12:00, 2026-11-02T12:00:00Z")
             ) from exc
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=zone)
@@ -245,9 +217,7 @@ def timestamp_convert(value: str | int | float | None = None, tz: str = "UTC") -
         "human": local.strftime("%d.%m.%Y %H:%M:%S"),
         "rfc2822": utc.strftime("%a, %d %b %Y %H:%M:%S +0000"),
         "timezone": tz or "UTC",
-        "weekday": ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"][
-            local.weekday()
-        ],
+        "weekday": WEEKDAYS_FULL[get_lang()][local.weekday()],
         "relative": humanize_delta(utc),
     }
 
@@ -260,16 +230,16 @@ MAX_MATCHES = 1000
 
 def regex_test(pattern: str, text: str, flags: str = "") -> dict[str, Any]:
     if pattern == "":
-        raise ToolError("Пустой шаблон")
+        raise ToolError(tr("Пустой шаблон"))
     flag_value = 0
     for ch in flags:
         if ch not in _FLAG_MAP:
-            raise ToolError(f"Неизвестный флаг: {ch}")
+            raise ToolError(tr("Неизвестный флаг: {flag}", flag=ch))
         flag_value |= _FLAG_MAP[ch]
     try:
         compiled = re.compile(pattern, flag_value)
     except re.error as exc:
-        raise ToolError(f"Ошибка в регулярном выражении: {exc.msg}", pos=exc.pos) from exc
+        raise ToolError(tr("Ошибка в регулярном выражении: {msg}", msg=exc.msg), pos=exc.pos) from exc
 
     matches = []
     for m in compiled.finditer(text):
@@ -305,7 +275,7 @@ def hash_text(text: str, algorithms: tuple[str, ...] = HASH_ALGORITHMS) -> dict[
     result = {}
     for algo in algorithms:
         if algo not in HASH_ALGORITHMS:
-            raise ToolError(f"Неподдерживаемый алгоритм: {algo}")
+            raise ToolError(tr("Неподдерживаемый алгоритм: {algo}", algo=algo))
         result[algo] = hashlib.new(algo, text.encode("utf-8")).hexdigest()
     return result
 
@@ -332,7 +302,7 @@ def generate_password(
 ) -> dict[str, Any]:
     length = int(length)
     if not 4 <= length <= 256:
-        raise ToolError("Длина пароля должна быть от 4 до 256")
+        raise ToolError(tr("Длина пароля должна быть от 4 до 256"))
     pools = []
     if upper:
         pools.append(string.ascii_uppercase)
@@ -346,7 +316,7 @@ def generate_password(
         pools = ["".join(c for c in p if c not in AMBIGUOUS) for p in pools]
     pools = [p for p in pools if p]
     if not pools:
-        raise ToolError("Выберите хотя бы один набор символов")
+        raise ToolError(tr("Выберите хотя бы один набор символов"))
 
     alphabet = "".join(pools)
     # guarantee at least one char from each selected pool
@@ -357,5 +327,6 @@ def generate_password(
         chars[i], chars[j] = chars[j], chars[i]
 
     entropy = round(length * math.log2(len(alphabet)), 1)
-    strength = "слабый" if entropy < 50 else "средний" if entropy < 80 else "сильный" if entropy < 120 else "очень сильный"
-    return {"password": "".join(chars), "entropy": entropy, "strength": strength}
+    level = "weak" if entropy < 50 else "medium" if entropy < 80 else "strong" if entropy < 120 else "very_strong"
+    label = {"weak": tr("слабый"), "medium": tr("средний"), "strong": tr("сильный"), "very_strong": tr("очень сильный")}[level]
+    return {"password": "".join(chars), "entropy": entropy, "strength": label, "level": level}
