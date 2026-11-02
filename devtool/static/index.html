@@ -1,0 +1,255 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dev Toolkit</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%23818cf8'/><stop offset='1' stop-color='%23c084fc'/></linearGradient></defs><rect width='32' height='32' rx='8' fill='url(%23g)'/><path d='M11 11l-5 5 5 5M21 11l5 5-5 5M18 9l-4 14' stroke='white' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    try { const t = localStorage.getItem("devtool-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+<div class="app">
+  <!-- ============================== SIDEBAR ============================== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-logo">
+        <svg viewBox="0 0 24 24"><path d="M8 7l-5 5 5 5M16 7l5 5-5 5M13.5 4.5l-3 15"/></svg>
+      </div>
+      <div>
+        <div class="brand-name">Dev Toolkit</div>
+        <div class="brand-sub">v0.1 · офлайн</div>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-label">Модули</div>
+      <a class="nav-item active" href="#">
+        <svg viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg>
+        Утилиты
+      </a>
+      <a class="nav-item disabled" title="Этап 2">
+        <svg viewBox="0 0 24 24"><path d="M8 4h8l4 4v12H4V4h4zM8 4v4h8"/><path d="M8 13h8M8 17h5"/></svg>
+        Сниппеты <span class="soon">скоро</span>
+      </a>
+      <a class="nav-item disabled" title="Этап 3">
+        <svg viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></svg>
+        Дневник <span class="soon">скоро</span>
+      </a>
+      <a class="nav-item disabled" title="Этап 4">
+        <svg viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="9" r="2.5"/><path d="M6 8.5v7M18 11.5c0 3-4 3.5-10 5"/></svg>
+        Git-дашборд <span class="soon">скоро</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button class="kbd-hint" id="openPalette" type="button">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
+        Поиск <kbd>Ctrl</kbd><kbd>K</kbd>
+      </button>
+      <button class="icon-btn" id="themeToggle" type="button" title="Сменить тему" aria-label="Сменить тему">
+        <svg class="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <!-- ============================== MAIN ============================== -->
+  <main class="main">
+    <header class="page-head">
+      <div>
+        <h1>Утилиты</h1>
+        <p class="muted">Всё работает локально, данные не покидают ваш компьютер.</p>
+      </div>
+      <div class="status-pill" id="status"><span class="dot"></span><span>сервер</span></div>
+    </header>
+
+    <div class="tool-tabs" role="tablist" id="tabs"></div>
+
+    <!-- JSON -->
+    <section class="tool" data-tool="json" data-title="JSON" data-desc="Форматирование и проверка" data-icon="braces">
+      <div class="toolbar">
+        <div class="segmented" data-name="jsonMode">
+          <button class="on" data-value="format">Форматировать</button>
+          <button data-value="minify">Минифицировать</button>
+        </div>
+        <label class="field-inline">Отступ
+          <select id="jsonIndent"><option value="2">2</option><option value="4">4</option><option value="8">8</option></select>
+        </label>
+        <label class="switch"><input type="checkbox" id="jsonSort"><span></span>Сортировать ключи</label>
+        <div class="spacer"></div>
+        <button class="btn ghost" data-sample="json">Пример</button>
+      </div>
+      <div class="split">
+        <div class="pane">
+          <div class="pane-head"><span>Ввод</span><button class="mini" data-clear="jsonIn">Очистить</button></div>
+          <textarea id="jsonIn" spellcheck="false" placeholder='{"вставьте": "JSON сюда"}'></textarea>
+        </div>
+        <div class="pane">
+          <div class="pane-head"><span>Результат <em class="meta" id="jsonMeta"></em></span><button class="mini" data-copy="jsonOut">Копировать</button></div>
+          <pre class="code" id="jsonOut"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- JWT -->
+    <section class="tool" data-tool="jwt" data-title="JWT" data-desc="Декодер токенов" data-icon="key">
+      <div class="toolbar">
+        <span class="muted small">Подпись не проверяется, токен только раскодируется.</span>
+        <div class="spacer"></div>
+        <button class="btn ghost" data-sample="jwt">Пример</button>
+      </div>
+      <div class="pane">
+        <div class="pane-head"><span>Токен</span><button class="mini" data-clear="jwtIn">Очистить</button></div>
+        <textarea id="jwtIn" class="short" spellcheck="false" placeholder="eyJhbGciOi..."></textarea>
+        <div class="jwt-colored" id="jwtColored"></div>
+      </div>
+      <div class="jwt-status" id="jwtStatus"></div>
+      <div class="split">
+        <div class="pane">
+          <div class="pane-head"><span class="tag t-red">Header</span><button class="mini" data-copy="jwtHeader">Копировать</button></div>
+          <pre class="code" id="jwtHeader"></pre>
+        </div>
+        <div class="pane">
+          <div class="pane-head"><span class="tag t-violet">Payload</span><button class="mini" data-copy="jwtPayload">Копировать</button></div>
+          <pre class="code" id="jwtPayload"></pre>
+        </div>
+      </div>
+      <div class="cards" id="jwtTimes"></div>
+    </section>
+
+    <!-- Base64 / URL -->
+    <section class="tool" data-tool="encode" data-title="Base64 / URL" data-desc="Кодирование строк" data-icon="code">
+      <div class="toolbar">
+        <div class="segmented" data-name="encKind">
+          <button class="on" data-value="base64">Base64</button>
+          <button data-value="url">URL</button>
+        </div>
+        <div class="segmented" data-name="encDir">
+          <button class="on" data-value="encode">Кодировать</button>
+          <button data-value="decode">Декодировать</button>
+        </div>
+        <label class="switch" id="urlSafeWrap"><input type="checkbox" id="b64UrlSafe"><span></span>URL-safe</label>
+        <div class="spacer"></div>
+        <button class="btn ghost" id="encSwap" title="Поменять местами">⇄ Поменять</button>
+      </div>
+      <div class="split">
+        <div class="pane">
+          <div class="pane-head"><span>Ввод</span><button class="mini" data-clear="encIn">Очистить</button></div>
+          <textarea id="encIn" spellcheck="false" placeholder="Привет, мир!"></textarea>
+        </div>
+        <div class="pane">
+          <div class="pane-head"><span>Результат</span><button class="mini" data-copy="encOut">Копировать</button></div>
+          <pre class="code wrap" id="encOut"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Timestamp -->
+    <section class="tool" data-tool="time" data-title="Timestamp" data-desc="Unix ↔ дата" data-icon="clock">
+      <div class="toolbar">
+        <input id="tsIn" class="input mono grow" placeholder="1730505600, 1730505600000 или 2026-11-02 12:00">
+        <select id="tsTz" class="input"></select>
+        <button class="btn primary" id="tsNow">Сейчас</button>
+      </div>
+      <div class="hero-time" id="tsHero"></div>
+      <div class="cards" id="tsCards"></div>
+    </section>
+
+    <!-- Regex -->
+    <section class="tool" data-tool="regex" data-title="Regex" data-desc="Тестер выражений" data-icon="regex">
+      <div class="regex-bar">
+        <span class="slash">/</span>
+        <input id="reIn" class="mono" spellcheck="false" placeholder="(?P<user>\w+)@(?P<domain>[\w.]+)">
+        <span class="slash">/</span>
+        <div class="flags" id="reFlags">
+          <button data-flag="i" title="IGNORECASE">i</button>
+          <button data-flag="m" title="MULTILINE">m</button>
+          <button data-flag="s" title="DOTALL">s</button>
+          <button data-flag="x" title="VERBOSE">x</button>
+        </div>
+        <button class="btn ghost" data-sample="regex">Пример</button>
+      </div>
+      <div class="re-error" id="reError"></div>
+      <div class="split">
+        <div class="pane">
+          <div class="pane-head"><span>Текст</span><em class="meta" id="reMeta"></em></div>
+          <div class="re-editor">
+            <pre class="re-highlight code" id="reHighlight" aria-hidden="true"></pre>
+            <textarea id="reText" spellcheck="false" placeholder="Текст для проверки..."></textarea>
+          </div>
+        </div>
+        <div class="pane">
+          <div class="pane-head"><span>Совпадения</span></div>
+          <div class="matches" id="reMatches"></div>
+        </div>
+      </div>
+      <p class="muted small">Синтаксис Python <code>re</code>. Именованные группы: <code>(?P&lt;name&gt;...)</code></p>
+    </section>
+
+    <!-- Generators -->
+    <section class="tool" data-tool="gen" data-title="Генераторы" data-desc="UUID, пароли, хэши" data-icon="sparkle">
+      <div class="gen-grid">
+        <div class="card big">
+          <div class="card-title">🔐 Пароль</div>
+          <div class="pw-out">
+            <code id="pwOut">—</code>
+            <button class="icon-btn" id="pwRegen" title="Сгенерировать заново">
+              <svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></svg>
+            </button>
+            <button class="icon-btn" data-copy="pwOut" title="Копировать">
+              <svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/></svg>
+            </button>
+          </div>
+          <div class="meter"><div id="pwMeter"></div></div>
+          <div class="muted small" id="pwInfo"></div>
+          <label class="range"><span>Длина: <b id="pwLenVal">20</b></span>
+            <input type="range" id="pwLen" min="8" max="64" value="20">
+          </label>
+          <div class="switch-row">
+            <label class="switch"><input type="checkbox" id="pwUpper" checked><span></span>A–Z</label>
+            <label class="switch"><input type="checkbox" id="pwLower" checked><span></span>a–z</label>
+            <label class="switch"><input type="checkbox" id="pwDigits" checked><span></span>0–9</label>
+            <label class="switch"><input type="checkbox" id="pwSymbols" checked><span></span>!@#</label>
+            <label class="switch"><input type="checkbox" id="pwAmb"><span></span>без l/1/O/0</label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">🆔 UUID v4</div>
+          <div class="toolbar tight">
+            <label class="field-inline">Кол-во <input type="number" id="uuidCount" class="input num" min="1" max="100" value="5"></label>
+            <label class="switch"><input type="checkbox" id="uuidUpper"><span></span>ВЕРХНИЙ</label>
+            <label class="switch"><input type="checkbox" id="uuidNoHyph"><span></span>без «-»</label>
+          </div>
+          <div class="uuid-list" id="uuidList"></div>
+          <div class="toolbar tight">
+            <button class="btn primary" id="uuidGen">Сгенерировать</button>
+            <button class="btn ghost" data-copy="uuidList">Копировать все</button>
+          </div>
+        </div>
+
+        <div class="card wide">
+          <div class="card-title"># Хэши</div>
+          <textarea id="hashIn" class="short" spellcheck="false" placeholder="Текст для хэширования"></textarea>
+          <div class="hash-list" id="hashList"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- Command palette -->
+<div class="palette-backdrop" id="palette" hidden>
+  <div class="palette">
+    <input id="paletteIn" placeholder="Найти инструмент..." autocomplete="off">
+    <div class="palette-list" id="paletteList"></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
