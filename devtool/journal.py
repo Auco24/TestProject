@@ -10,16 +10,19 @@ from pathlib import Path
 from typing import Any
 
 from . import gitinfo, settings
+from .i18n import SINCE_WEEKDAY, day_label, get_lang, plural, tr
 from .tools import ToolError
 
 KINDS = ("done", "plan", "blocker", "note")
 KIND_LABELS = {"done": "Сделал", "plan": "План", "blocker": "Блокер", "note": "Заметка"}
+
+
+def kind_labels() -> dict[str, str]:
+    return {"done": tr("Сделал"), "plan": tr("План"), "blocker": tr("Блокер"), "note": tr("Заметка")}
+
 MAX_TEXT = 2000
 OPEN_ITEMS_WINDOW = 14  # days an unfinished plan / blocker keeps showing up in the stand-up
 
-WEEKDAYS = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"]
-WEEKDAYS_GEN = ["понедельника", "вторника", "среды", "четверга", "пятницы", "субботы", "воскресенья"]
-MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]
 
 
 class NotFound(ToolError):
@@ -40,19 +43,16 @@ def _parse_day(value: Any, name: str = "date") -> date:
     try:
         return date.fromisoformat(str(value))
     except ValueError as exc:
-        raise ToolError(f"Некорректная дата в поле '{name}': {value}") from exc
+        raise ToolError(tr("Некорректная дата в поле '{name}': {value}", name=name, value=value)) from exc
 
 
 def human_day(d: date, ref: date | None = None) -> str:
     ref = ref or today()
     if d == ref:
-        return "Сегодня"
+        return tr("Сегодня")
     if d == ref - timedelta(days=1):
-        return "Вчера"
-    label = f"{WEEKDAYS[d.weekday()]}, {d.day} {MONTHS[d.month - 1]}"
-    if d.year != ref.year:
-        label += f" {d.year}"
-    return label[0].upper() + label[1:]
+        return tr("Вчера")
+    return day_label(d.weekday(), d.day, d.month, d.year if d.year != ref.year else None)
 
 
 def previous_workday(d: date) -> date:
@@ -80,23 +80,23 @@ def _row(row: sqlite3.Row) -> dict[str, Any]:
 def get(conn: sqlite3.Connection, entry_id: int) -> dict[str, Any]:
     row = conn.execute("SELECT * FROM journal WHERE id = ?", (entry_id,)).fetchone()
     if row is None:
-        raise NotFound(f"Запись #{entry_id} не найдена")
+        raise NotFound(tr("Запись #{id} не найдена", id=entry_id))
     return _row(row)
 
 
 def _clean_text(text: Any) -> str:
     text = str(text or "").strip()
     if not text:
-        raise ToolError("Текст записи не может быть пустым")
+        raise ToolError(tr("Текст записи не может быть пустым"))
     if len(text) > MAX_TEXT:
-        raise ToolError(f"Запись длиннее {MAX_TEXT} символов")
+        raise ToolError(tr("Запись длиннее {n} символов", n=MAX_TEXT))
     return text
 
 
 def _clean_kind(kind: Any) -> str:
     kind = str(kind or "done").lower()
     if kind not in KINDS:
-        raise ToolError(f"Неизвестный тип записи: {kind}. Допустимо: {', '.join(KINDS)}")
+        raise ToolError(tr("Неизвестный тип записи: {kind}. Допустимо: {allowed}", kind=kind, allowed=", ".join(KINDS)))
     return kind
 
 
@@ -153,7 +153,7 @@ def update(conn: sqlite3.Connection, entry_id: int, data: dict[str, Any]) -> dic
 
 def delete(conn: sqlite3.Connection, entry_id: int) -> None:
     if conn.execute("DELETE FROM journal WHERE id = ?", (entry_id,)).rowcount == 0:
-        raise NotFound(f"Запись #{entry_id} не найдена")
+        raise NotFound(tr("Запись #{id} не найдена", id=entry_id))
 
 
 # ---------------------------------------------------------------------- Projects
@@ -268,7 +268,7 @@ def standup(conn: sqlite3.Connection, for_day: Any = None, fmt: str = "md", with
     data = {
         "date": day_s,
         "since": prev_s,
-        "since_label": "Вчера" if prev == day - timedelta(days=1) else f"С {WEEKDAYS_GEN[prev.weekday()]}",
+        "since_label": tr("Вчера") if prev == day - timedelta(days=1) else SINCE_WEEKDAY[get_lang()][prev.weekday()],
         "done": done,
         "commits": commits,
         "plans": plans,
@@ -286,7 +286,7 @@ def _project_suffix(e: dict) -> str:
 
 def render_standup(data: dict[str, Any], fmt: str = "md") -> str:
     if fmt not in ("md", "slack", "text"):
-        raise ToolError("Формат отчёта: md, slack или text")
+        raise ToolError(tr("Формат отчёта: md, slack или text"))
     bold = {"md": "**{}**", "slack": "*{}*", "text": "{}"}[fmt]
     bullet = {"md": "- ", "slack": "• ", "text": "  - "}[fmt]
 
@@ -307,16 +307,16 @@ def render_standup(data: dict[str, Any], fmt: str = "md") -> str:
         else:
             code = "`" if fmt != "text" else ""
             n = len(subjects)
-            word = "коммит" if n % 10 == 1 and n % 100 != 11 else "коммита" if 2 <= n % 10 <= 4 and not 12 <= n % 100 <= 14 else "коммитов"
+            word = plural(n, "коммит", "коммита", "коммитов")
             shown = "; ".join(f"{code}{s}{code}" for s in subjects[:5]) + ("…" if n > 5 else "")
             prev_items.append(f"{proj}: {n} {word} — {shown}")
     section(data["since_label"], prev_items, "—")
 
     today_items = [e["text"] + _project_suffix(e) for e in data["plans"]]
     today_items += [e["text"] + _project_suffix(e) + " ✓" for e in data["done_today"]]
-    section("Сегодня", today_items, "—")
+    section(tr("Сегодня"), today_items, "—")
 
-    section("Блокеры", [e["text"] + _project_suffix(e) for e in data["blockers"]], "нет")
+    section(tr("Блокеры"), [e["text"] + _project_suffix(e) for e in data["blockers"]], tr("нет"))
     return "\n".join(lines).rstrip() + "\n"
 
 

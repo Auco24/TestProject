@@ -10,10 +10,21 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__, db, gitinfo, journal, repos, settings, snippets, tools
+from .i18n import reset_request_lang, set_request_lang, tr
 
 STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(title="Dev Toolkit", version=__version__, docs_url="/api/docs", redoc_url=None)
+
+
+@app.middleware("http")
+async def _language(request: Request, call_next):
+    """The web UI sends the chosen language in X-Lang; errors and reports follow it."""
+    token = set_request_lang(request.headers.get("x-lang") or request.query_params.get("lang"))
+    try:
+        return await call_next(request)
+    finally:
+        reset_request_lang(token)
 
 
 @app.exception_handler(snippets.NotFound)
@@ -32,7 +43,7 @@ def _str(body: dict[str, Any], key: str, default: str = "") -> str:
     if value is None:
         return default
     if not isinstance(value, (str, int, float)):
-        raise tools.ToolError(f"Поле '{key}' должно быть строкой")
+        raise tools.ToolError(tr("Поле '{key}' должно быть строкой", key=key))
     return str(value)
 
 
@@ -66,7 +77,7 @@ HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "version": __version__}
+    return {"status": "ok", "app": "devtool", "version": __version__}
 
 
 @app.post("/api/tools/{name:path}")
@@ -79,13 +90,13 @@ async def run_tool(name: str, request: Request) -> dict[str, Any]:
     except ValueError:
         body = {}
     if not isinstance(body, dict):
-        raise tools.ToolError("Тело запроса должно быть JSON-объектом")
+        raise tools.ToolError(tr("Тело запроса должно быть JSON-объектом"))
     try:
         return {"result": handler(body)}
     except (TypeError, ValueError) as exc:
         if isinstance(exc, tools.ToolError):
             raise
-        raise tools.ToolError(f"Некорректные параметры: {exc}") from exc
+        raise tools.ToolError(tr("Некорректные параметры: {error}", error=exc)) from exc
 
 
 # ------------------------------------------------------------------ Snippets
@@ -100,13 +111,13 @@ async def _json_body(request: Request) -> Any:
     try:
         return await request.json()
     except ValueError as exc:
-        raise tools.ToolError("Тело запроса должно быть корректным JSON") from exc
+        raise tools.ToolError(tr("Тело запроса должно быть корректным JSON")) from exc
 
 
 async def _object_body(request: Request) -> dict[str, Any]:
     body = await _json_body(request)
     if not isinstance(body, dict):
-        raise tools.ToolError("Тело запроса должно быть JSON-объектом")
+        raise tools.ToolError(tr("Тело запроса должно быть JSON-объектом"))
     return body
 
 
@@ -192,7 +203,7 @@ def journal_meta(conn=Depends(get_db)) -> dict[str, Any]:
     return {
         "projects": journal.projects(conn),
         "stats": journal.stats(conn),
-        "kinds": journal.KIND_LABELS,
+        "kinds": journal.kind_labels(),
         "git": gitinfo.git_available(),
         "git_roots": settings.get(conn, "git_roots"),
     }
@@ -228,14 +239,14 @@ async def set_git_roots(request: Request, conn=Depends(get_db)) -> dict[str, Any
     body = await _json_body(request)
     roots = body.get("roots") if isinstance(body, dict) else body
     if not isinstance(roots, list) or not all(isinstance(r, str) for r in roots):
-        raise tools.ToolError("Ожидается список путей")
+        raise tools.ToolError(tr("Ожидается список путей"))
     clean: list[str] = []
     for r in roots:
         p = Path(r.strip()).expanduser()
         if not r.strip():
             continue
         if not p.is_dir():
-            raise tools.ToolError(f"Папка не найдена: {r}")
+            raise tools.ToolError(tr("Папка не найдена: {path}", path=r))
         if str(p.resolve()) not in clean:
             clean.append(str(p.resolve()))
     settings.set(conn, "git_roots", clean)
@@ -248,10 +259,10 @@ async def set_git_roots(request: Request, conn=Depends(get_db)) -> dict[str, Any
 def _known_repo(conn, path: Any) -> str:
     """Only repositories the dashboard already knows about may be acted upon."""
     if not isinstance(path, str) or not path:
-        raise tools.ToolError("Не указан путь к репозиторию")
+        raise tools.ToolError(tr("Не указан путь к репозиторию"))
     resolved = str(Path(path).expanduser().resolve())
     if resolved not in journal.known_repos(conn):
-        raise tools.ToolError("Репозиторий не найден среди папок с проектами")
+        raise tools.ToolError(tr("Репозиторий не найден среди папок с проектами"))
     return resolved
 
 
@@ -287,7 +298,7 @@ async def git_delete_branches(request: Request, conn=Depends(get_db)) -> dict[st
     body = await _object_body(request)
     names = body.get("branches")
     if not isinstance(names, list) or not all(isinstance(n, str) for n in names) or not names:
-        raise tools.ToolError("Ожидается непустой список веток")
+        raise tools.ToolError(tr("Ожидается непустой список веток"))
     return repos.delete_branches(_known_repo(conn, body.get("path")), names)
 
 

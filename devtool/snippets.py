@@ -7,6 +7,7 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+from .i18n import tr
 from .tools import ToolError
 
 LANGUAGES = [
@@ -39,7 +40,7 @@ def normalize_tags(tags: Iterable[str] | str | None) -> list[str]:
         if t and t not in out:
             out.append(t)
     if len(out) > MAX_TAGS:
-        raise ToolError(f"Не больше {MAX_TAGS} тегов")
+        raise ToolError(tr("Не больше {n} тегов", n=MAX_TAGS))
     return out
 
 
@@ -48,16 +49,16 @@ def _validate(data: dict[str, Any], partial: bool = False) -> dict[str, Any]:
     if "title" in data or not partial:
         title = str(data.get("title") or "").strip()
         if not title:
-            raise ToolError("Название не может быть пустым")
+            raise ToolError(tr("Название не может быть пустым"))
         if len(title) > MAX_TITLE:
-            raise ToolError(f"Название длиннее {MAX_TITLE} символов")
+            raise ToolError(tr("Название длиннее {n} символов", n=MAX_TITLE))
         clean["title"] = title
     if "content" in data or not partial:
         content = str(data.get("content") or "")
         if not content.strip():
-            raise ToolError("Содержимое не может быть пустым")
+            raise ToolError(tr("Содержимое не может быть пустым"))
         if len(content) > MAX_CONTENT:
-            raise ToolError("Сниппет слишком большой")
+            raise ToolError(tr("Сниппет слишком большой"))
         clean["content"] = content.rstrip("\n")
     if "language" in data or not partial:
         lang = str(data.get("language") or "text").strip().lower()
@@ -87,7 +88,7 @@ def _set_tags(conn: sqlite3.Connection, snippet_id: int, tags: list[str]) -> Non
 def get(conn: sqlite3.Connection, snippet_id: int) -> dict[str, Any]:
     row = conn.execute("SELECT * FROM snippets WHERE id = ?", (snippet_id,)).fetchone()
     if row is None:
-        raise NotFound(f"Сниппет #{snippet_id} не найден")
+        raise NotFound(tr("Сниппет #{id} не найден", id=snippet_id))
     return _row_to_dict(conn, row)
 
 
@@ -121,7 +122,7 @@ def update(conn: sqlite3.Connection, snippet_id: int, data: dict[str, Any]) -> d
 
 def delete(conn: sqlite3.Connection, snippet_id: int) -> None:
     if conn.execute("DELETE FROM snippets WHERE id = ?", (snippet_id,)).rowcount == 0:
-        raise NotFound(f"Сниппет #{snippet_id} не найден")
+        raise NotFound(tr("Сниппет #{id} не найден", id=snippet_id))
 
 
 def mark_used(conn: sqlite3.Connection, snippet_id: int) -> dict[str, Any]:
@@ -129,7 +130,7 @@ def mark_used(conn: sqlite3.Connection, snippet_id: int) -> dict[str, Any]:
         "UPDATE snippets SET use_count = use_count + 1, last_used_at = ? WHERE id = ?", (_now(), snippet_id)
     )
     if cur.rowcount == 0:
-        raise NotFound(f"Сниппет #{snippet_id} не найден")
+        raise NotFound(tr("Сниппет #{id} не найден", id=snippet_id))
     return get(conn, snippet_id)
 
 
@@ -218,12 +219,12 @@ def export_all(conn: sqlite3.Connection) -> dict[str, Any]:
 def import_all(conn: sqlite3.Connection, data: Any, skip_duplicates: bool = True) -> dict[str, int]:
     items = data.get("snippets") if isinstance(data, dict) else data
     if not isinstance(items, list):
-        raise ToolError("Ожидается список сниппетов или объект с ключом 'snippets'")
+        raise ToolError(tr("Ожидается список сниппетов или объект с ключом 'snippets'"))
     existing = {(r[0], r[1]) for r in conn.execute("SELECT title, content FROM snippets")}
     added = skipped = 0
     for item in items:
         if not isinstance(item, dict):
-            raise ToolError("Каждый сниппет должен быть объектом")
+            raise ToolError(tr("Каждый сниппет должен быть объектом"))
         clean = _validate(item)
         if skip_duplicates and (clean["title"], clean["content"]) in existing:
             skipped += 1
@@ -326,5 +327,10 @@ EXAMPLES: list[dict[str, Any]] = [
 ]
 
 
+def localized_examples() -> list[dict[str, Any]]:
+    """Starter snippets with titles and descriptions in the current language."""
+    return [{**e, "title": tr(e["title"]), "description": tr(e["description"]) if e.get("description") else ""} for e in EXAMPLES]
+
+
 def add_examples(conn: sqlite3.Connection) -> dict[str, int]:
-    return import_all(conn, EXAMPLES)
+    return import_all(conn, localized_examples())
