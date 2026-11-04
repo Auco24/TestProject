@@ -76,9 +76,24 @@
 
 </details>
 
-## Установка
+## Скачать программу
 
-Нужен Python 3.10+. Git нужен для дневника (коммиты) и Git-дашборда; остальное работает и без него.
+Готовые установщики лежат на странице **[Releases](https://github.com/Auco24/TestProject/releases/latest)**. Python ставить не нужно, он уже внутри.
+
+| Система | Файл | Как установить |
+|---|---|---|
+| **Windows 10 / 11** | `DevToolkit-Setup-<версия>.exe` | Запустите установщик. Права администратора не нужны. Программа появится в меню «Пуск» и, если отметить, на рабочем столе. Удаление: «Параметры» → «Приложения». |
+| **macOS 11+** | `DevToolkit-<версия>-macOS.dmg` | Откройте `.dmg` и перетащите **Dev Toolkit** в «Программы». При первом запуске: правый клик → «Открыть» (приложение пока не подписано сертификатом Apple). |
+
+Программа открывается в собственном окне и работает полностью офлайн. Ваши данные (сниппеты, дневник, настройки) хранятся в папке `~/.devtool` (`C:\Users\<имя>\.devtool` на Windows) и сохраняются при удалении и обновлении программы.
+
+Для дневника (коммиты) и Git-дашборда нужен установленный [Git](https://git-scm.com/downloads); остальное работает и без него.
+
+> **Windows SmartScreen** может показать «Windows защитила ваш компьютер», потому что установщик не подписан платным сертификатом. Нажмите «Подробнее» → «Выполнить в любом случае».
+
+## Установка из исходников (для разработчиков)
+
+Нужен Python 3.10+. Так же устанавливается командная строка `devtool`.
 
 ```bash
 git clone https://github.com/Auco24/TestProject.git
@@ -95,6 +110,13 @@ devtool start
 ```
 
 Браузер откроется на <http://127.0.0.1:8000>. Опции: `--port 9000`, `--no-browser`.
+
+Открыть в отдельном окне, как установленную программу:
+
+```bash
+pip install -e ".[desktop]"
+devtool app
+```
 
 ## CLI
 
@@ -163,6 +185,20 @@ pip install -e ".[dev]"
 pytest
 ```
 
+### Сборка установщиков
+
+Установщики собирает GitHub Actions (`.github/workflows/desktop.yml`) на каждом PR. Скачать их можно в разделе Artifacts у запуска. Чтобы опубликовать релиз, отправьте тег версии: `git tag v1.1.0 && git push origin v1.1.0`.
+
+Собрать локально (на той же ОС, для которой нужна сборка):
+
+```bash
+pip install -e ".[build]"
+pyinstaller packaging/devtool.spec --noconfirm   # dist/DevToolkit/ или dist/Dev Toolkit.app
+dist/DevToolkit/DevToolkit --smoke-test          # проверка сборки без окна
+```
+
+Для Windows установщик затем собирается так: `ISCC.exe packaging\windows\installer.iss` ([Inno Setup 6](https://jrsoftware.org/isinfo.php)).
+
 API-документация (Swagger) открывается на <http://127.0.0.1:8000/api/docs>, пока сервер запущен.
 
 ### Структура
@@ -179,11 +215,14 @@ devtool/
 ├── clipboard.py    # буфер обмена без внешних зависимостей
 ├── api.py          # FastAPI: /api/tools/*, /api/snippets/*, /api/journal/*, /api/git/* + интерфейс
 ├── cli.py          # Typer CLI
+├── desktop.py      # настольное приложение: сервер в фоне + окно pywebview
+├── i18n.py         # переводы (русский — исходный язык, английский, немецкий)
 └── static/         # интерфейс: HTML + CSS + JS, без внешних CDN
     ├── app.js      #   утилиты, навигация, Ctrl+K
     ├── snippets.js #   модуль сниппетов + подсветка синтаксиса
     ├── journal.js  #   дневник, стендап, тепловая карта
     └── git.js      #   Git-дашборд
+packaging/          # PyInstaller spec, установщик Windows (Inno Setup)
 tests/              # pytest: модули, API, CLI (с настоящими временными git-репозиториями)
 ```
 

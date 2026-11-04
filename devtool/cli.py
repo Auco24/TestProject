@@ -65,6 +65,13 @@ def start(
     uvicorn.run("devtool.api:app", host=host, port=port, log_level="warning")
 
 
+@app.command("app", help=tr("Открыть Dev Toolkit в отдельном окне (нужен pywebview)."))
+def app_cmd() -> None:
+    from . import desktop
+
+    raise typer.Exit(desktop.main([]))
+
+
 @app.command("json", help=tr("Отформатировать или минифицировать JSON."))
 def json_cmd(
     text: Optional[str] = typer.Argument(None, help=tr("JSON-строка или '-' для stdin.")),

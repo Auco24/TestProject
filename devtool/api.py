@@ -77,7 +77,7 @@ HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
 
 @app.get("/api/health")
 def health() -> dict[str, str]:
-    return {"status": "ok", "version": __version__}
+    return {"status": "ok", "app": "devtool", "version": __version__}
 
 
 @app.post("/api/tools/{name:path}")
