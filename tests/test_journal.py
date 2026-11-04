@@ -205,3 +205,9 @@ def test_find_repos_skips_noise(tmp_path, repo):
     (tmp_path / "projects" / "plain").mkdir()
     assert gitinfo.find_repos([str(tmp_path / "projects")]) == [str(repo.resolve())]
     assert gitinfo.find_repos([str(tmp_path / "missing")]) == []
+
+
+@pytest.mark.parametrize("value", ["2026-11-02T10:00:00Z", "2026-11-02T10:00:00+00:00", "2026-11-02T13:00:00+03:00"])
+def test_parse_iso_datetime_accepts_git_utc_suffix(value):
+    # git prints UTC times with a trailing "Z", which datetime.fromisoformat rejects before Python 3.11
+    assert gitinfo.parse_iso_datetime(value).timestamp() == 1793613600

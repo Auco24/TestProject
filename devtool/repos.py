@@ -12,7 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .gitinfo import _git
+from .gitinfo import _git, parse_iso_datetime
 from .i18n import tr
 from .tools import ToolError
 
@@ -99,7 +99,7 @@ def _age_days(iso: str | None, now: datetime) -> int | None:
     if not iso:
         return None
     try:
-        return max(0, (now - datetime.fromisoformat(iso)).days)
+        return max(0, (now - parse_iso_datetime(iso)).days)
     except ValueError:
         return None
 

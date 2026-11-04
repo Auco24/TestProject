@@ -85,6 +85,15 @@ def find_repos(roots: list[str], max_depth: int = 2) -> list[str]:
     return found
 
 
+def parse_iso_datetime(value: str) -> datetime:
+    """datetime.fromisoformat that also accepts a trailing 'Z' (git prints UTC that way;
+    Python < 3.11 cannot parse it)."""
+    value = value.strip()
+    if value.endswith(("Z", "z")):
+        value = value[:-1] + "+00:00"
+    return datetime.fromisoformat(value)
+
+
 @lru_cache(maxsize=256)
 def _author_email(repo: str) -> str | None:
     return _git(repo, "config", "user.email") or None
@@ -129,7 +138,7 @@ def commits_between(repo: str, start: date, end: date, mine_only: bool = True) -
             continue
         sha, iso, subject = parts
         try:
-            when = datetime.fromisoformat(iso).astimezone()
+            when = parse_iso_datetime(iso).astimezone()
         except ValueError:
             continue
         if start <= when.date() <= end:
